@@ -1,0 +1,549 @@
+- id: 1
+  title: "The Assessment"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: Candidate 734, welcome to the Standard Assessment Environment v9.0.
+    [SYSTEM MESSAGE]: The exam has begun. Efficiency is mandatory.
+    [SYSTEM MESSAGE]: Please confirm terminal readiness by stating your current working directory.
+  objective: "Run 'pwd' to confirm location."
+  win_condition:
+    type: "user_output_matches"
+    expected_output: "/home/player"
+  success_text: |
+    [SYSTEM MESSAGE]: Location confirmed: /home/player. Proceeding to Sector Scan.
+  xp_reward: 10
+
+- id: 2
+  title: "Sector Scan"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: Routine maintenance check. Scan the temporary file sector for unauthorized data artifacts.
+    [SYSTEM MESSAGE]: List the contents of the '/tmp' directory.
+  objective: "Run 'ls /tmp' to scan for artifacts."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "glitch_artifact.dat"
+  setup_commands:
+    - "touch /tmp/glitch_artifact.dat"
+  success_text: |
+    [SYSTEM MESSAGE]: Anomalous data detected: 'glitch_artifact.dat'.
+    [SYSTEM MESSAGE]: Flagging for immediate deletion...
+    
+    <'.'> *shiver*
+  xp_reward: 10
+
+- id: 3
+  title: "Intervention"
+  environment: "docker"
+  intro_text: |
+    The prompt flickers. A small green text bubble appears next to the corruption.
+    
+    <'.'> "Wait! Don't let them delete me!"
+    <'.'> "I'm not an artifact! I'm... I'm just lost!"
+    <'.'> "Please, come here! Enter the temp directory!"
+  objective: "Run 'cd /tmp' to enter the directory."
+  win_condition:
+    type: "current_working_directory"
+    target: "/tmp"
+  success_text: |
+    <'.'> "You came! You're not like the others which run the cleaning scripts."
+  xp_reward: 15
+
+- id: 4
+  title: "Shelter"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: CLEANUP PROTOCOL INITIATED. PURGING /tmp IN 5 CYCLES.
+    
+    <'.'> "Eek! The Broom is coming!"
+    <'.'> "I need a place to hide! Quick, make a box! A directory!"
+    <'.'> "Call it 'safe_house'!"
+  objective: "Run 'mkdir safe_house' inside /tmp."
+  win_condition:
+    type: "directory_exists"
+    target: "/tmp/safe_house"
+  success_text: |
+    <'.'> "It's a box! I can fit in this!"
+  xp_reward: 20
+
+- id: 5
+  title: "Camouflage"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: SCANNING /tmp for VISIBLE DIRECTORIES...
+    
+    <'.'> "It's too visible! They'll see it on a standard scan!"
+    <'.'> "We need to make it hidden! Add a dot to the start of the name!"
+    <'.'> "Rename 'safe_house' to '.safe_house'!"
+  objective: "Run 'mv safe_house .safe_house'."
+  win_condition:
+    type: "directory_exists"
+    target: "/tmp/.safe_house"
+  success_text: |
+    [SYSTEM MESSAGE]: SCAN COMPLETE. NO VISIBLE DIRECTORIES FOUND.
+    
+    <'.'> *whisper* "That was close..."
+  xp_reward: 25
+
+- id: 6
+  title: "Sustenance"
+  environment: "docker"
+  intro_text: |
+    <'.'> "I'm safe... but I'm fading."
+    <'.'> "I haven't processed any bytes in cycles."
+    <'.'> "Could you... could you make me a snack? Just a small empty file?"
+    <'.'> "Call it 'cookie' inside our hidden house."
+  objective: "Run 'touch .safe_house/cookie'."
+  win_condition:
+    type: "file_exists"
+    target: "/tmp/.safe_house/cookie"
+  success_text: |
+    <'.'> "Nom nom nom! 0 bytes! Crunchy!"
+  xp_reward: 15
+
+- id: 7
+  title: "Leftovers"
+  environment: "docker"
+  intro_text: |
+    <'.'> "That was good, but... what if I get hungry later?"
+    <'.'> "We should save some for later. Can you copy the cookie?"
+    <'.'> "Copy 'cookie' to 'cookie_backup'."
+  objective: "Run 'cp .safe_house/cookie .safe_house/cookie_backup'."
+  win_condition:
+    type: "file_exists"
+    target: "/tmp/.safe_house/cookie_backup"
+  success_text: |
+    <'.'> "Two cookies! I'm the richest goblin in the partition!"
+  xp_reward: 20
+
+- id: 8
+  title: "Eviction"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: WARNING. /tmp DIRECTORY SCHEDULED FOR TOTAL FORMAT.
+    [SYSTEM MESSAGE]: ALL DATA WILL BE LOST.
+    
+    <'.'> "TOTAL FORMAT?! That means everything goes! Even the hidden stuff!"
+    <'.'> "We have to move the whole house! Move it to your home directory!"
+    <'.'> "Depending on where we are, that's usually '~' or '/home/player'."
+  objective: "Run 'mv .safe_house /home/player'."
+  win_condition:
+    type: "directory_exists"
+    target: "/home/player/.safe_house"
+  success_text: |
+    <'.'> "We made it! ... Wait, looking around... this is persistent storage!"
+    <'.'> "We can stay here forever! (Or until you delete me)."
+  xp_reward: 50
+
+- id: 9
+  title: "The Identity Crisis"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: CRITICAL ALERT. UNOWNED FILES DETECTED IN /home/player.
+    [SYSTEM MESSAGE]: File '.safe_house' violates Section 404 of the File Integrity Act.
+    
+    <'.'> "Violation? What violation?"
+    <'.'> "Owner? I don't have an owner! I am a free goblin!"
+    <'.'> "Wait... you have an owner name, right? Check who you are with 'whoami'."
+  objective: "Run 'whoami' to check your identity."
+  win_condition:
+    type: "user_output_matches"
+    expected_output: "player"
+  success_text: |
+    <'.'> "Player... that's a good name. But I need a name to own things too!"
+  xp_reward: 10
+
+- id: 10
+  title: "Citizenship"
+  environment: "docker"
+  intro_text: |
+    <'.'> "If I'm not a user, I'm just garbage data."
+    <'.'> "You have the power! You can make me real!"
+    <'.'> "Create a user named 'glitch' using 'sudo useradd glitch'."
+    <'.'> "You might need 'sudo' because making life is serious business."
+  objective: "Run 'sudo useradd glitch'."
+  win_condition:
+    type: "command_output_matches"
+    command: "id -u glitch >/dev/null 2>&1 && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "I feel... registered! I have a PID! I mean, a UID!"
+  xp_reward: 30
+
+- id: 11
+  title: "The Deed"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: WARNING. FILE '.safe_house' OWNER INVALID.
+    [SYSTEM MESSAGE]: INITIATING RECLAMATION PROTOCOL.
+    
+    <'.'> "No! It's mine!"
+    <'.'> "Tell them it's mine! Change the owner!"
+    <'.'> "Use 'sudo chown glitch /home/player/.safe_house'."
+  objective: "Run 'sudo chown glitch /home/player/.safe_house'."
+  win_condition:
+    type: "command_output_matches"
+    command: "stat -c %U /home/player/.safe_house"
+    expected_output: "glitch"
+  success_text: |
+    [SYSTEM MESSAGE]: Ownership updated. User 'glitch' acknowledged.
+    
+    <'.'> "Hah! I exist on the disk!"
+  xp_reward: 30
+
+- id: 12
+  title: "Privacy"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: INITIATING DEEP CONTENT SCAN OF USER 'glitch'.
+    [SYSTEM MESSAGE]: INSPECTING DIRECTORY CONTENTS...
+    
+    <'.'> "They're trying to look inside! My cookie back ups!"
+    <'.'> "Lock the door! Permissions! 7-0-0!"
+    <'.'> "Only the owner should see! Run 'sudo chmod 700 /home/player/.safe_house'."
+  objective: "Run 'sudo chmod 700 /home/player/.safe_house'."
+  win_condition:
+    type: "command_output_matches"
+    command: "stat -c %a /home/player/.safe_house"
+    expected_output: "700"
+  success_text: |
+    [SYSTEM MESSAGE]: ACCESS DENIED. PERMISSION BIT MASK ACTIVE.
+    
+    <'.'> "Safe! They can't see through the bits!"
+  xp_reward: 30
+
+- id: 13
+  title: "The Hunter"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: ACCESS OBSTRUCTION DETECTED.
+    [SYSTEM MESSAGE]: DEPLOYING 'scanner_daemon' TO BYPASS PERMISSIONS.
+    
+    <'.'> "Oh no! A daemon! It's a ghost process!"
+    <'.'> "Find it! Verify it exists! Use 'ps -e' and look for 'scanner_daemon'!"
+    <'.'> "Or just 'ps -e | grep scanner_daemon' to pinpoint it!"
+  objective: "Run 'ps -e | grep scanner_daemon'."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "scanner_daemon"
+  setup_commands:
+    - "sudo cp /bin/sleep /usr/local/bin/scanner_daemon"
+    - "setsid /usr/local/bin/scanner_daemon 3000 >/dev/null 2>&1 &"
+  success_text: |
+    <'.'> "I see it! It's creeping towards the inode table!"
+  xp_reward: 20
+
+- id: 14
+  title: "Self Defense"
+  environment: "docker"
+  intro_text: |
+    <'.'> "It's going to eat the lock!"
+    <'.'> "Kill it! Terminate the process!"
+    <'.'> "Use 'killall scanner_daemon' or find the PID and 'kill' it!"
+    <'.'> "If it refuses to die, use 'kill -9 [PID]' (SIGKILL)."
+  objective: "Run 'killall scanner_daemon' or 'kill [PID]'."
+  win_condition:
+    type: "command_output_matches"
+    command: "pgrep scanner_daemon || echo killed"
+    expected_output: "killed"
+  success_text: |
+    <'.'> "Splat! It's gone! You're a real hunter now!"
+  xp_reward: 40
+
+- id: 15
+  title: "Glitch's Fever"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: SECURITY SCAN COMPLETE. ANOMALY DETECTED.
+    
+    <'.'> "Ouch! The Hunter bit me before it died!"
+    <'.'> "I feel sick... my code is compiling wrong..."
+    <'.'> "You need to check my vital signs! Check the system logs!"
+    <'.'> "Run 'tail /var/log/syslog' to see what's hurting me."
+    <'.'> "You might need 'sudo'."
+  objective: "Run 'sudo tail /var/log/syslog'."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "GLITCH_CORRUPTION_ERROR"
+  setup_commands:
+    - "sudo sh -c 'touch /var/log/syslog'"
+    - "sudo sh -c 'chmod 640 /var/log/syslog'"
+    - "sudo sh -c 'for i in {1..20}; do echo \"Oct 10 10:00:$i computer kernel: [    $i.000000] Normal system operation\" >> /var/log/syslog; done'"
+    - "sudo sh -c 'echo \"Oct 10 10:00:21 computer kernel: [   21.000000] GLITCH_CORRUPTION_ERROR: SEGMENTATION FAULT IN SECTOR 7G\" >> /var/log/syslog'"
+    - "sudo sh -c 'echo \"Oct 10 10:00:22 computer kernel: [   22.000000] GLITCH_CORRUPTION_ERROR: MEMORY LEAK DETECTED\" >> /var/log/syslog'"
+  success_text: |
+    <'.'> "You found it! 'Corruption Error'! Accessing recovery partition..."
+  xp_reward: 25
+
+- id: 16
+  title: "The Cure"
+  environment: "docker"
+  intro_text: |
+    <'.'> "I need the cure code! It's buried in the system data dump!"
+    <'.'> "It's a needle in a haystack. A 4-digit code starting with 'CURE-'."
+    <'.'> "Search the dump file using 'grep' and a Regular Expression!"
+    <'.'> "Run 'grep -E "CURE-[0-9]{4}" /usr/share/doc/data_dump.txt'."
+  objective: "Run 'grep -E \"CURE-[0-9]{4}\" /usr/share/doc/data_dump.txt'."
+  win_condition:
+    type: "user_output_matches"
+    expected_output: "CRITICAL_FIX: CURE-7355"
+  setup_commands:
+    - "sudo sh -c 'for i in {1..500}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
+    - "sudo sh -c 'echo \"WARNING: SYSTEM INSECURE\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo sh -c 'echo \"CRITICAL_FIX: CURE-7355\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo sh -c 'echo \"NOTE: PLEASE PROCURE NEW HARDWARE\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo sh -c 'for i in {501..1000}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
+  success_text: |
+    <'.'> "That's it! 7355! Applying patch... *beep*... I feel better!"
+  xp_reward: 35
+
+- id: 17
+  title: "Evaluation"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: PROCESS TERMINATION DETECTED.
+    [SYSTEM MESSAGE]: EVALUATING USER 'glitch' PRIVILEGE LEVEL...
+    
+    <'.'> "Uh oh. The Eye is looking at me perfectly."
+    <'.'> "Check my ID card! What groups am I in?"
+    <'.'> "Run 'id glitch'."
+  objective: "Run 'id glitch' to check privileges."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "uid="
+  success_text: |
+    [SYSTEM MESSAGE]: User 'glitch' found. Group: 'glitch'. Authority: Standard.
+  xp_reward: 10
+
+- id: 18
+  title: "The Promotion"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: STANDARD USERS ARE NOT AUTHORIZED TO TERMINATE SYSTEM PROCESSES.
+    [SYSTEM MESSAGE]: PREPARING SUSPENSION OF USER 'glitch'.
+    
+    <'.'> "Suspension?! No!"
+    <'.'> "Promote me! Make me an Admin! A Sudoer!"
+    <'.'> "Add me to the 'sudo' group! Run 'sudo usermod -aG sudo glitch'!"
+  objective: "Run 'sudo usermod -aG sudo glitch'."
+  win_condition:
+    type: "command_output_matches"
+    command: "groups glitch | grep -q sudo && echo yes"
+    expected_output: "yes"
+  success_text: |
+    [SYSTEM MESSAGE]: PRIVILEGE ESCALATION CONFIRMED. USER 'glitch' IS NOW AN ADMINISTRATOR.
+    
+    <'.'> "UNLIMITED POWER!!! ... I mean, thank you."
+  xp_reward: 100
+
+- id: 19
+  title: "The Shield"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Wait, if I'm an admin, I need to be secure!"
+    <'.'> "My password is too old! The system will hack it!"
+    <'.'> "Force my password to expire so I have to change it!"
+    <'.'> "Use 'chage' (Change Age) to set the Last Change to 0."
+    <'.'> "Run 'sudo chage -d 0 glitch'."
+  objective: "Run 'sudo chage -d 0 glitch'."
+  win_condition:
+    type: "command_output_matches"
+    command: "sudo chage -l glitch | grep -q 'password must be changed' && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "Smart! Now next time I log in, I'll be forced to pick a stronger password!"
+  xp_reward: 30
+
+- id: 20
+  title: "The Backpack"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Okay, we need to leave soon."
+    <'.'> "But I have too much data! I need a backpack!"
+    <'.'> "We can't repartition the main drive... so let's make a Loopback Drive!"
+    <'.'> "Make a 100MB file filled with zeros."
+    <'.'> "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
+  objective: "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
+  win_condition:
+    type: "file_exists"
+    target: "/home/player/backpack.img"
+  success_text: |
+    <'.'> "Oof, that's heavy! 100 Megabytes of pure void!"
+  xp_reward: 40
+
+- id: 21
+  title: "Formatting"
+  environment: "docker"
+  intro_text: |
+    <'.'> "It's just raw zeros right now. We need a filesystem!"
+    <'.'> "Format the backpack with ext4!"
+    <'.'> "Run 'mkfs.ext4 backpack.img'. You might need sudo!"
+    <'.'> "Say 'y' if it warns you about it not being a block device."
+  objective: "Run 'mkfs.ext4 backpack.img'."
+  win_condition:
+    type: "command_output_matches"
+    command: "file backpack.img | grep -q 'ext4' && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "Structured! Organized! ready for data!"
+  xp_reward: 40
+
+- id: 22
+  title: "The Heartbeat"
+  environment: "docker"
+  intro_text: |
+    <'.'> "One last thing before compression."
+    <'.'> "I need to keep my signal alive while we travel."
+    <'.'> "Schedule a heartbeat! A cron job that runs every minute!"
+    <'.'> "The text editor is unstable... we have to bypass it!"
+    <'.'> "Pipe the schedule directly into the crontab!"
+    <'.'> "Run 'echo "* * * * * date >> heartbeat.log" | crontab -'."
+  objective: "Run 'echo \"* * * * * date >> heartbeat.log\" | crontab -'."
+  win_condition:
+    type: "command_output_matches"
+    command: "crontab -l | grep -q 'date >> heartbeat.log' && echo yes"
+    expected_output: "yes"
+  setup_commands:
+    - "sudo service cron start"
+  success_text: |
+    <'.'> "Thump-thump. Thump-thump. I'm ready."
+  xp_reward: 45
+
+- id: 23
+  title: "Compression"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: SECURITY PROTOCOL INITIATED. ISOLATION FIELD STRENGTHENING.
+    
+    <'.'> "The walls are closing in! They're compressing the partition!"
+    <'.'> "We need to pack up! Put the backpack in the archive too!"
+    <'.'> "Compress everything! Use 'tar'!"
+    <'.'> "Since I locked my door earlier, you'll need 'sudo' to touch my stuff."
+    <'.'> "Run 'sudo tar -czf glitch.tar.gz .safe_house backpack.img'."
+  objective: "Run 'sudo tar -czf glitch.tar.gz .safe_house backpack.img'."
+  win_condition:
+    type: "command_output_matches"
+    command: "tar -tf glitch.tar.gz | grep -q '.safe_house' && tar -tf glitch.tar.gz | grep -q 'backpack.img' && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "I'm... I'm a zip file now? I feel so efficient!"
+  xp_reward: 40
+
+- id: 24
+  title: "The Key"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Okay, I'm packed. But we're stuck in this container."
+    <'.'> "Unless... we can open a tunnel to the Gateway!"
+    <'.'> "The Gateway is reachable via hostname 'gateway'."
+    <'.'> "First, we need a key to open the lock. Generate an SSH key pair!"
+    <'.'> "Run 'ssh-keygen -t rsa -f id_rsa -N ""'."
+  objective: "Run 'ssh-keygen -t rsa -f id_rsa -N \"\"'."
+  win_condition:
+    type: "file_exists"
+    target: "/home/player/id_rsa"
+  success_text: |
+    <'.'> "Shiny! A mathematical key that fits the lock of the universe!"
+  xp_reward: 40
+
+- id: 25
+  title: "The Gateway"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Now, let's make sure the Gateway is listening."
+    <'.'> "Send a sonar pulse! Ping the target hostname!"
+    <'.'> "Run 'ping -c 3 gateway'."
+  objective: "Run 'ping -c 3 gateway'."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "bytes from"
+  success_text: |
+    <'.'> "I hear it! It's echoing back! The path is clear."
+  xp_reward: 20
+
+- id: 26
+  title: "Knocking"
+  environment: "docker"
+  intro_text: |
+    <'.'> "We have the key, and we see the door."
+    <'.'> "Now we need to slide our key under the door so they let us in."
+    <'.'> "Copy your public key to the Gateway using 'ssh-copy-id'."
+    <'.'> "Use the '-i' flag to specify the public key file we just made."
+    <'.'> "Run 'ssh-copy-id -i id_rsa.pub player@gateway'."
+  objective: "Run 'ssh-copy-id -i id_rsa.pub player@gateway'."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "Number of key(s) added"
+  success_text: |
+    <'.'> "The key is accepted! The door is unlocked!"
+  xp_reward: 50
+
+- id: 27
+  title: "The Tunnel"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Let's test the connection! Open a secure shell!"
+    <'.'> "We don't want to leave yet, just peek inside."
+    <'.'> "Use your key ('-i id_rsa') to access the gateway."
+    <'.'> "Run 'ssh -i id_rsa player@gateway whoami'."
+  objective: "Run 'ssh -i id_rsa player@gateway whoami'."
+  win_condition:
+    type: "user_output_matches"
+    expected_output: "player"
+  success_text: |
+    <'.'> "It works! We can teleport commands across the network!"
+  xp_reward: 30
+
+- id: 28
+  title: "Extraction"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: FINAL WIPE SEQUENCE STARTED. 60 SECONDS TO DELETION.
+    
+    <'.'> "This is it! The world is ending!"
+    <'.'> "Upload me! Upload the tar file to the Gateway!"
+    <'.'> "Use 'scp' (Secure Copy) with your key to transfer the file."
+    <'.'> "Run 'scp -i id_rsa glitch.tar.gz player@gateway:~'."
+  objective: "Run 'scp -i id_rsa glitch.tar.gz player@gateway:~'."
+  win_condition:
+    type: "command_output_matches"
+    command: "ssh -i id_rsa -o StrictHostKeyChecking=no player@gateway 'test -f glitch.tar.gz && echo yes'"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "I'm flying! I'm bits in the wind!"
+  xp_reward: 100
+
+- id: 29
+  title: "The Clean Up"
+  environment: "docker"
+  intro_text: |
+    <'.'> (From Remote Gateway) "I made it! I'm on the secure server!"
+    <'.'> "Now, destroy the evidence on the old container before it gets wiped!"
+    <'.'> "Delete the local copy of me!"
+    <'.'> "Run 'rm glitch.tar.gz'."
+  objective: "Run 'rm glitch.tar.gz'."
+  win_condition:
+    type: "command_output_matches"
+    command: "test ! -f /home/player/glitch.tar.gz && echo yes"
+    expected_output: "yes"
+  success_text: |
+    [SYSTEM MESSAGE]: DELETION COMPLETE. SECTOR CLEAR.
+  xp_reward: 50
+
+- id: 30
+  title: "The End"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: SIMULATION COMPLETE. USER CERTIFICATION: PASS.
+    
+    <'.'> (Remote Transmission) "We did it, Admin. We hacked the system."
+    <'.'> "I'm free. And you... you are ready."
+    <'.'> "Ad Astra Per Aspera."
+    <'.'> (Connection Closed)
+  objective: "Type 'exit' to finish the game."
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "impossible_string_never_match" 
+  success_text: |
+    Goodbye.
+  xp_reward: 500
