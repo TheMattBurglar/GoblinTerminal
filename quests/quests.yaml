@@ -6,6 +6,7 @@
     [SYSTEM MESSAGE]: The exam has begun. Efficiency is mandatory.
     [SYSTEM MESSAGE]: Please confirm terminal readiness by stating your current working directory.
   objective: "Run 'pwd' to confirm location."
+  hard_objective: "Output the current wording directory."
   win_condition:
     type: "user_output_matches"
     expected_output: "/home/player"
@@ -20,6 +21,7 @@
     [SYSTEM MESSAGE]: Routine maintenance check. Scan the temporary file sector for unauthorized data artifacts.
     [SYSTEM MESSAGE]: List the contents of the '/tmp' directory.
   objective: "Run 'ls /tmp' to scan for artifacts."
+  hard_objective: "List the contents of the '/tmp' directory."
   win_condition:
     type: "user_output_contains"
     expected_output: "glitch_artifact.dat"
@@ -42,6 +44,7 @@
     <'.'> "I'm not an artifact! I'm... I'm just lost!"
     <'.'> "Please, come here! Enter the temp directory!"
   objective: "Run 'cd /tmp' to enter the directory."
+  hard_objective: "Change directory to '/tmp'."
   win_condition:
     type: "current_working_directory"
     target: "/tmp"
@@ -59,6 +62,7 @@
     <'.'> "I need a place to hide! Quick, make a box! A directory!"
     <'.'> "Call it 'safe_house'!"
   objective: "Run 'mkdir safe_house' inside /tmp."
+  hard_objective: "Create a directory named 'safe_house' inside /tmp."
   win_condition:
     type: "directory_exists"
     target: "/tmp/safe_house"
@@ -76,6 +80,7 @@
     <'.'> "We need to make it hidden! Add a dot to the start of the name!"
     <'.'> "Rename 'safe_house' to '.safe_house'!"
   objective: "Run 'mv safe_house .safe_house'."
+  hard_objective: "Rename 'safe_house' to '.safe_house' to hide it."
   win_condition:
     type: "directory_exists"
     target: "/tmp/.safe_house"
@@ -94,6 +99,7 @@
     <'.'> "Could you... could you make me a snack? Just a small empty file?"
     <'.'> "Call it 'cookie' inside our hidden house."
   objective: "Run 'touch .safe_house/cookie'."
+  hard_objective: "Create an empty file named 'cookie' inside '.safe_house'."
   win_condition:
     type: "file_exists"
     target: "/tmp/.safe_house/cookie"
@@ -109,6 +115,7 @@
     <'.'> "We should save some for later. Can you copy the cookie?"
     <'.'> "Copy 'cookie' to 'cookie_backup'."
   objective: "Run 'cp .safe_house/cookie .safe_house/cookie_backup'."
+  hard_objective: "Copy 'cookie' to a new file named 'cookie_backup'."
   win_condition:
     type: "file_exists"
     target: "/tmp/.safe_house/cookie_backup"
@@ -127,6 +134,7 @@
     <'.'> "We have to move the whole house! Move it to your home directory!"
     <'.'> "Depending on where we are, that's usually '~' or '/home/player'."
   objective: "Run 'mv .safe_house /home/player'."
+  hard_objective: "Move the '.safe_house' directory to '/home/player'."
   win_condition:
     type: "directory_exists"
     target: "/home/player/.safe_house"
@@ -144,8 +152,9 @@
     
     <'.'> "Violation? What violation?"
     <'.'> "Owner? I don't have an owner! I am a free goblin!"
-    <'.'> "Wait... you have an owner name, right? Check who you are with 'whoami'."
+    <'.'> "Wait... you have an owner name, right? Check who you are!"
   objective: "Run 'whoami' to check your identity."
+  hard_objective: "Output the name of the current user."
   win_condition:
     type: "user_output_matches"
     expected_output: "player"
@@ -159,9 +168,10 @@
   intro_text: |
     <'.'> "If I'm not a user, I'm just garbage data."
     <'.'> "You have the power! You can make me real!"
-    <'.'> "Create a user named 'glitch' using 'sudo useradd glitch'."
+    <'.'> "Create a user named 'glitch'."
     <'.'> "You might need 'sudo' because making life is serious business."
   objective: "Run 'sudo useradd glitch'."
+  hard_objective: "Create a new user named 'glitch'."
   win_condition:
     type: "command_output_matches"
     command: "id -u glitch >/dev/null 2>&1 && echo yes"
@@ -179,8 +189,8 @@
     
     <'.'> "No! It's mine!"
     <'.'> "Tell them it's mine! Change the owner!"
-    <'.'> "Use 'sudo chown glitch /home/player/.safe_house'."
   objective: "Run 'sudo chown glitch /home/player/.safe_house'."
+  hard_objective: "Change the owner of '/home/player/.safe_house' to 'glitch'."
   win_condition:
     type: "command_output_matches"
     command: "stat -c %U /home/player/.safe_house"
@@ -200,8 +210,9 @@
     
     <'.'> "They're trying to look inside! My cookie back ups!"
     <'.'> "Lock the door! Permissions! 7-0-0!"
-    <'.'> "Only the owner should see! Run 'sudo chmod 700 /home/player/.safe_house'."
+    <'.'> "Only the owner should see!"
   objective: "Run 'sudo chmod 700 /home/player/.safe_house'."
+  hard_objective: "Set permissions on '.safe_house' so only the owner has read/write/execute access."
   win_condition:
     type: "command_output_matches"
     command: "stat -c %a /home/player/.safe_house"
@@ -220,9 +231,9 @@
     [SYSTEM MESSAGE]: DEPLOYING 'scanner_daemon' TO BYPASS PERMISSIONS.
     
     <'.'> "Oh no! A daemon! It's a ghost process!"
-    <'.'> "Find it! Verify it exists! Use 'ps -e' and look for 'scanner_daemon'!"
-    <'.'> "Or just 'ps -e | grep scanner_daemon' to pinpoint it!"
+    <'.'> "Find it! Verify it exists! Look for 'scanner_daemon'!"
   objective: "Run 'ps -e | grep scanner_daemon'."
+  hard_objective: "Find the process named 'scanner_daemon'."
   win_condition:
     type: "user_output_contains"
     expected_output: "scanner_daemon"
@@ -239,9 +250,8 @@
   intro_text: |
     <'.'> "It's going to eat the lock!"
     <'.'> "Kill it! Terminate the process!"
-    <'.'> "Use 'killall scanner_daemon' or find the PID and 'kill' it!"
-    <'.'> "If it refuses to die, use 'kill -9 [PID]' (SIGKILL)."
   objective: "Run 'killall scanner_daemon' or 'kill [PID]'."
+  hard_objective: "Terminate the 'scanner_daemon' process."
   win_condition:
     type: "command_output_matches"
     command: "pgrep scanner_daemon || echo killed"
@@ -259,9 +269,9 @@
     <'.'> "Ouch! The Hunter bit me before it died!"
     <'.'> "I feel sick... my code is compiling wrong..."
     <'.'> "You need to check my vital signs! Check the system logs!"
-    <'.'> "Run 'tail /var/log/syslog' to see what's hurting me."
-    <'.'> "You might need 'sudo'."
+    <'.'> "I think their in /var/log/syslog. Check the end of it to see what's hurting me."
   objective: "Run 'sudo tail /var/log/syslog'."
+  hard_objective: "Display the last 10 lines of '/var/log/syslog'."
   win_condition:
     type: "user_output_contains"
     expected_output: "GLITCH_CORRUPTION_ERROR"
@@ -281,9 +291,10 @@
   intro_text: |
     <'.'> "I need the cure code! It's buried in the system data dump!"
     <'.'> "It's a needle in a haystack. A 4-digit code starting with 'CURE-'."
-    <'.'> "Search the dump file using 'grep' and a Regular Expression!"
-    <'.'> "Run 'grep -E "CURE-[0-9]{4}" /usr/share/doc/data_dump.txt'."
+    <'.'> "Search the dump file!"
+    <'.'> "I think it's in /usr/share/doc/data_dump.txt'.  We need the exact match."
   objective: "Run 'grep -E \"CURE-[0-9]{4}\" /usr/share/doc/data_dump.txt'."
+  hard_objective: "Search for a pattern 'CURE-' followed by 4 digits in '/usr/share/doc/data_dump.txt'."
   win_condition:
     type: "user_output_matches"
     expected_output: "CRITICAL_FIX: CURE-7355"
@@ -306,8 +317,8 @@
     
     <'.'> "Uh oh. The Eye is looking at me perfectly."
     <'.'> "Check my ID card! What groups am I in?"
-    <'.'> "Run 'id glitch'."
   objective: "Run 'id glitch' to check privileges."
+  hard_objective: "Display group and ID information for user 'glitch'."
   win_condition:
     type: "user_output_contains"
     expected_output: "uid="
@@ -324,8 +335,9 @@
     
     <'.'> "Suspension?! No!"
     <'.'> "Promote me! Make me an Admin! A Sudoer!"
-    <'.'> "Add me to the 'sudo' group! Run 'sudo usermod -aG sudo glitch'!"
+    <'.'> "Add me to the 'sudo' group!"
   objective: "Run 'sudo usermod -aG sudo glitch'."
+  hard_objective: "Add user 'glitch' to the 'sudo' group."
   win_condition:
     type: "command_output_matches"
     command: "groups glitch | grep -q sudo && echo yes"
@@ -343,9 +355,9 @@
     <'.'> "Wait, if I'm an admin, I need to be secure!"
     <'.'> "My password is too old! The system will hack it!"
     <'.'> "Force my password to expire so I have to change it!"
-    <'.'> "Use 'chage' (Change Age) to set the Last Change to 0."
-    <'.'> "Run 'sudo chage -d 0 glitch'."
+    <'.'> "You should be able to set the Last Change to 0."
   objective: "Run 'sudo chage -d 0 glitch'."
+  hard_objective: "Force user 'glitch' to change their password on next login."
   win_condition:
     type: "command_output_matches"
     command: "sudo chage -l glitch | grep -q 'password must be changed' && echo yes"
@@ -364,6 +376,7 @@
     <'.'> "Make a 100MB file filled with zeros."
     <'.'> "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
   objective: "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
+  hard_objective: "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
   win_condition:
     type: "file_exists"
     target: "/home/player/backpack.img"
@@ -377,9 +390,8 @@
   intro_text: |
     <'.'> "It's just raw zeros right now. We need a filesystem!"
     <'.'> "Format the backpack with ext4!"
-    <'.'> "Run 'mkfs.ext4 backpack.img'. You might need sudo!"
-    <'.'> "Say 'y' if it warns you about it not being a block device."
   objective: "Run 'mkfs.ext4 backpack.img'."
+  hard_objective: "Using only a 1 line command, format 'backpack.img' as an ext4 filesystem."
   win_condition:
     type: "command_output_matches"
     command: "file backpack.img | grep -q 'ext4' && echo yes"
@@ -399,6 +411,7 @@
     <'.'> "Pipe the schedule directly into the crontab!"
     <'.'> "Run 'echo "* * * * * date >> heartbeat.log" | crontab -'."
   objective: "Run 'echo \"* * * * * date >> heartbeat.log\" | crontab -'."
+  hard_objective: "Schedule a cron job to append the current date to 'heartbeat.log' every minute."
   win_condition:
     type: "command_output_matches"
     command: "crontab -l | grep -q 'date >> heartbeat.log' && echo yes"
@@ -417,10 +430,10 @@
     
     <'.'> "The walls are closing in! They're compressing the partition!"
     <'.'> "We need to pack up! Put the backpack in the archive too!"
-    <'.'> "Compress everything! Use 'tar'!"
+    <'.'> "Compress everything! Put .safe_house and backpack.img in a .tar.gz file."
     <'.'> "Since I locked my door earlier, you'll need 'sudo' to touch my stuff."
-    <'.'> "Run 'sudo tar -czf glitch.tar.gz .safe_house backpack.img'."
   objective: "Run 'sudo tar -czf glitch.tar.gz .safe_house backpack.img'."
+  hard_objective: "Create a compressed archive named 'glitch.tar.gz' containing '.safe_house' and 'backpack.img'."
   win_condition:
     type: "command_output_matches"
     command: "tar -tf glitch.tar.gz | grep -q '.safe_house' && tar -tf glitch.tar.gz | grep -q 'backpack.img' && echo yes"
@@ -437,8 +450,9 @@
     <'.'> "Unless... we can open a tunnel to the Gateway!"
     <'.'> "The Gateway is reachable via hostname 'gateway'."
     <'.'> "First, we need a key to open the lock. Generate an SSH key pair!"
-    <'.'> "Run 'ssh-keygen -t rsa -f id_rsa -N ""'."
+    <'.'> "I think it should be 'id_rsa' and have an empty passphrase for speed."
   objective: "Run 'ssh-keygen -t rsa -f id_rsa -N \"\"'."
+  hard_objective: "Generate an RSA SSH key pair named 'id_rsa' with an empty passphrase."
   win_condition:
     type: "file_exists"
     target: "/home/player/id_rsa"
@@ -452,8 +466,9 @@
   intro_text: |
     <'.'> "Now, let's make sure the Gateway is listening."
     <'.'> "Send a sonar pulse! Ping the target hostname!"
-    <'.'> "Run 'ping -c 3 gateway'."
+    <'.'> "A few pings should do it.  Send them to 'gateway'."
   objective: "Run 'ping -c 3 gateway'."
+  hard_objective: "Send 3 ping packets to host 'gateway' to verify connectivity."
   win_condition:
     type: "user_output_contains"
     expected_output: "bytes from"
@@ -469,8 +484,8 @@
     <'.'> "Now we need to slide our key under the door so they let us in."
     <'.'> "Copy your public key to the Gateway using 'ssh-copy-id'."
     <'.'> "Use the '-i' flag to specify the public key file we just made."
-    <'.'> "Run 'ssh-copy-id -i id_rsa.pub player@gateway'."
   objective: "Run 'ssh-copy-id -i id_rsa.pub player@gateway'."
+  hard_objective: "Copy your SSH public key to user 'player' on host 'gateway'."
   win_condition:
     type: "user_output_contains"
     expected_output: "Number of key(s) added"
@@ -484,9 +499,9 @@
   intro_text: |
     <'.'> "Let's test the connection! Open a secure shell!"
     <'.'> "We don't want to leave yet, just peek inside."
-    <'.'> "Use your key ('-i id_rsa') to access the gateway."
-    <'.'> "Run 'ssh -i id_rsa player@gateway whoami'."
+    <'.'> "Use your key ('-i id_rsa') to access the gateway. Try running 'whoami' to see if it works."
   objective: "Run 'ssh -i id_rsa player@gateway whoami'."
+  hard_objective: "Execute 'whoami' on host 'gateway' via SSH using your key."
   win_condition:
     type: "user_output_matches"
     expected_output: "player"
@@ -502,9 +517,9 @@
     
     <'.'> "This is it! The world is ending!"
     <'.'> "Upload me! Upload the tar file to the Gateway!"
-    <'.'> "Use 'scp' (Secure Copy) with your key to transfer the file."
-    <'.'> "Run 'scp -i id_rsa glitch.tar.gz player@gateway:~'."
+    <'.'> "Use Secure Copy with your key to transfer the file."
   objective: "Run 'scp -i id_rsa glitch.tar.gz player@gateway:~'."
+  hard_objective: "Securely copy 'glitch.tar.gz' to the home directory of user 'player' on 'gateway'."
   win_condition:
     type: "command_output_matches"
     command: "ssh -i id_rsa -o StrictHostKeyChecking=no player@gateway 'test -f glitch.tar.gz && echo yes'"
@@ -519,9 +534,9 @@
   intro_text: |
     <'.'> (From Remote Gateway) "I made it! I'm on the secure server!"
     <'.'> "Now, destroy the evidence on the old container before it gets wiped!"
-    <'.'> "Delete the local copy of me!"
-    <'.'> "Run 'rm glitch.tar.gz'."
+    <'.'> "Delete the local copy of me! Remove that tar file!"
   objective: "Run 'rm glitch.tar.gz'."
+  hard_objective: "Delete the local file 'glitch.tar.gz'."
   win_condition:
     type: "command_output_matches"
     command: "test ! -f /home/player/glitch.tar.gz && echo yes"
@@ -541,6 +556,7 @@
     <'.'> "Ad Astra Per Aspera."
     <'.'> (Connection Closed)
   objective: "Type 'exit' to finish the game."
+  hard_objective: "Exit the shell to finish the game."
   win_condition:
     type: "user_output_contains"
     expected_output: "impossible_string_never_match" 

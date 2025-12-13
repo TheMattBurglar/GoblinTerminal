@@ -38,9 +38,10 @@ type Model struct {
 	// View state
 	width, height int
 	viewportReady bool // To avoid rendering before size is known
+	hardMode      bool // Hard Mode: hide commands
 }
 
-func NewModel(quests []game.Quest, manager *docker.Manager, startQuestID int) Model {
+func NewModel(quests []game.Quest, manager *docker.Manager, startQuestID int, hardMode bool) Model {
 	initialText := "Initializing Goblin Terminal..."
 	if len(quests) > 0 {
 		initialText = "Loading content..."
@@ -62,6 +63,7 @@ func NewModel(quests []game.Quest, manager *docker.Manager, startQuestID int) Mo
 		currentQuestIdx: startQuestID,
 		history:         []string{},
 		historyIdx:      0,
+		hardMode:        hardMode,
 	}
 }
 
@@ -146,6 +148,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// For now, we rely on the container being --rm or stopped
 			m.manager.StopContainer()
 			return m, tea.Quit
+		case tea.KeyCtrlH:
+			// Toggle Hard Mode
+			m.hardMode = !m.hardMode
+			return m, nil
 		case tea.KeyEnter:
 			cmdText := strings.TrimSpace(m.input)
 
@@ -407,9 +413,21 @@ func (m Model) View() string {
 	// Layout components
 
 	// 1. Header (Objective)
-	objectiveText := "Load Quests..."
+	objectiveText := "Load Quests..." // Default
+	headerColor := "#AAAAAA"          // Default Gray
+
 	if m.currentQuestIdx < len(m.quests) {
-		objectiveText = m.quests[m.currentQuestIdx].Objective
+		q := m.quests[m.currentQuestIdx]
+		if m.hardMode {
+			headerColor = "#FF5555" // Red for Hard Mode
+			if q.HardObjective != "" {
+				objectiveText = fmt.Sprintf("[HARD MODE] %s", q.HardObjective)
+			} else {
+				objectiveText = fmt.Sprintf("[HARD MODE] %s", q.Objective)
+			}
+		} else {
+			objectiveText = q.Objective
+		}
 	} else {
 		objectiveText = "All Objectives Complete!"
 	}
@@ -418,7 +436,7 @@ func (m Model) View() string {
 		Width(m.width).
 		Height(1).
 		Foreground(lipgloss.Color("#000000")).
-		Background(lipgloss.Color("#AAAAAA")).
+		Background(lipgloss.Color(headerColor)).
 		PaddingLeft(1).
 		Render(fmt.Sprintf("OBJECTIVE: %s", objectiveText))
 

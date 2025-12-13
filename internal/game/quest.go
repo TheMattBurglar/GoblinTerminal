@@ -29,6 +29,7 @@ type Quest struct {
 	Title         string       `yaml:"title"`
 	IntroText     string       `yaml:"intro_text"`
 	Objective     string       `yaml:"objective"`
+	HardObjective string       `yaml:"hard_objective"`
 	WinCondition  WinCondition `yaml:"win_condition"`
 	SuccessText   string       `yaml:"success_text"`
 	XPReward      int          `yaml:"xp_reward"`

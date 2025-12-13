@@ -6,7 +6,7 @@ It puts you in the role of a system administrator ("Wizard") investigating a mys
 
 ## Purpose
 
-I built this project to serve as a fun, interactive challenge **inspired by** the **Canonical Using Linux Terminal (C.U.L.T.)** exam. While not a replacement for official study materials, the quest objectives are guided by the real-world skills covered in that certification.
+I built this project to serve as a fun, interactive challenge *inspired by* the **Canonical Using Linux Terminal (C.U.L.T.)** exam. While not a replacement for official study materials, the quest objectives are guided by the real-world skills covered in that certification.
 
 ## Key Features
 
@@ -21,6 +21,7 @@ I built this project to serve as a fun, interactive challenge **inspired by** th
     *   *Note: Some topics like disk partitioning are adapted for the container environment.*
 *   **Quality of Life**: Built-in command history (Up/Down arrows) and strict win-condition validation.
 *   **Immediate Feedback**: The game validates your actions in real-time (e.g., checking if a file was actually created or permissions changed).
+*   **Hard Mode**: A separate mode that challenges you to complete the same quests without being specifically told the commands to use.  I recommend using this mode to practice your familiarity with the commands.
 
 ## Prerequisites
 
