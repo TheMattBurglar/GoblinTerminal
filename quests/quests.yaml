@@ -1,3 +1,11 @@
+# Quest fields:
+#   objective       the exact command (revealed as the final hint)
+#   hard_objective  the task, without the command (shown in the objective bar)
+#   hints           clues revealed one at a time by 'hint', vague -> specific
+#   lesson          shown after completion: what the command did and related knowledge
+#   mistakes        regex 'pattern' on the player's command + 'message' explaining the error.
+#                   Shown only when the quest isn't completed, unless 'always: true'.
+
 - id: 1
   title: "The Assessment"
   environment: "docker"
@@ -5,8 +13,19 @@
     [SYSTEM MESSAGE]: Candidate 734, welcome to the Standard Assessment Environment v9.0.
     [SYSTEM MESSAGE]: The exam has begun. Efficiency is mandatory.
     [SYSTEM MESSAGE]: Please confirm terminal readiness by stating your current working directory.
-  objective: "Run 'pwd' to confirm location."
-  hard_objective: "Output the current wording directory."
+  objective: "pwd"
+  hard_objective: "Output the current working directory."
+  hints:
+    - "One command prints your 'working directory'. Its name is the initials of what it does: Print Working Directory."
+  lesson: |
+    pwd = Print Working Directory. It shows the absolute path of where you are.
+    - Absolute paths start at the root '/', e.g. /home/player
+    - Relative paths start from where you are, e.g. docs/notes.txt
+    - '~' is shorthand for your home directory (/home/player here)
+    Related: 'echo $PWD' prints the same thing from a shell variable.
+  mistakes:
+    - pattern: '^\s*cwd\b'
+      message: "There's no 'cwd' command. You want pwd: Print Working Directory."
   win_condition:
     type: "user_output_matches"
     expected_output: "/home/player"
@@ -20,8 +39,20 @@
   intro_text: |
     [SYSTEM MESSAGE]: Routine maintenance check. Scan the temporary file sector for unauthorized data artifacts.
     [SYSTEM MESSAGE]: List the contents of the '/tmp' directory.
-  objective: "Run 'ls /tmp' to scan for artifacts."
+  objective: "ls /tmp"
   hard_objective: "List the contents of the '/tmp' directory."
+  hints:
+    - "The command to LiSt directory contents is two letters."
+    - "Give the command a path as an argument: the directory to list is /tmp."
+  lesson: |
+    ls lists directory contents. With no argument it lists the current directory.
+    Useful options (exam favorites):
+      ls -l   long format: permissions, owner, group, size, date
+      ls -a   also show hidden "dot" files (names starting with '.')
+      ls -h   human-readable sizes (use with -l: ls -lh)
+      ls -R   recurse into subdirectories
+      ls -t   sort by modification time, newest first
+    Options can be combined: ls -lah /tmp
   win_condition:
     type: "user_output_contains"
     expected_output: "glitch_artifact.dat"
@@ -30,7 +61,7 @@
   success_text: |
     [SYSTEM MESSAGE]: Anomalous data detected: 'glitch_artifact.dat'.
     [SYSTEM MESSAGE]: Flagging for immediate deletion...
-    
+
     <'.'> *shiver*
   xp_reward: 10
 
@@ -39,17 +70,36 @@
   environment: "docker"
   intro_text: |
     The prompt flickers. A small green text bubble appears next to the corruption.
-    
+
     <'.'> "Wait! Don't let them delete me!"
     <'.'> "I'm not an artifact! I'm... I'm just lost!"
     <'.'> "Please, come here! Enter the temp directory!"
-  objective: "Run 'cd /tmp' to enter the directory."
+  objective: "cd /tmp"
   hard_objective: "Change directory to '/tmp'."
+  hints:
+    - "'Change Directory' is a two-letter command."
+    - "cd takes the destination path. /tmp is an absolute path (it starts with /), so it works from anywhere."
+  lesson: |
+    cd changes your working directory.
+      cd /tmp      go to an absolute path
+      cd docs      go to a relative path (inside the current directory)
+      cd ..        go up one level, to the parent directory
+      cd  or cd ~  go home (/home/player)
+      cd -         go back to the previous directory
+    '.' means "this directory" and '..' means "the parent directory".
+    They work inside any path: ../other/file, ./script.sh
+  mistakes:
+    - pattern: '^\s*cd\s+tmp/?\s*$'
+      message: |
+        'tmp' without a leading slash is a RELATIVE path: it looks for a tmp folder
+        inside the directory you're in. Use the absolute path /tmp.
+    - pattern: '^\s*cd/'
+      message: "Put a space between cd and the path."
   win_condition:
     type: "current_working_directory"
     target: "/tmp"
   success_text: |
-    <'.'> "You came! You're not like the others which run the cleaning scripts."
+    <'.'> "You came! You're not like the others who run the cleaning scripts."
   xp_reward: 15
 
 - id: 4
@@ -57,12 +107,22 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: CLEANUP PROTOCOL INITIATED. PURGING /tmp IN 5 CYCLES.
-    
+
     <'.'> "Eek! The Broom is coming!"
     <'.'> "I need a place to hide! Quick, make a box! A directory!"
     <'.'> "Call it 'safe_house'!"
-  objective: "Run 'mkdir safe_house' inside /tmp."
+  objective: "mkdir safe_house   (inside /tmp)"
   hard_objective: "Create a directory named 'safe_house' inside /tmp."
+  hints:
+    - "The command name is an abbreviation of 'MaKe DIRectory'."
+    - "You're in /tmp, so a relative name works: mkdir <name>. From anywhere else, use the full path /tmp/safe_house."
+  lesson: |
+    mkdir creates directories.
+      mkdir safe_house         create one directory (relative to where you are)
+      mkdir /tmp/safe_house    same thing with an absolute path
+      mkdir -p a/b/c           create missing parent directories too (no error if they exist)
+      mkdir -m 700 private     create with specific permissions
+    Remove an EMPTY directory with rmdir name. For one with contents: rm -r name.
   win_condition:
     type: "directory_exists"
     target: "/tmp/safe_house"
@@ -75,18 +135,39 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: SCANNING /tmp for VISIBLE DIRECTORIES...
-    
+
     <'.'> "It's too visible! They'll see it on a standard scan!"
     <'.'> "We need to make it hidden! Add a dot to the start of the name!"
     <'.'> "Rename 'safe_house' to '.safe_house'!"
-  objective: "Run 'mv safe_house .safe_house'."
+  objective: "mv safe_house .safe_house"
   hard_objective: "Rename 'safe_house' to '.safe_house' to hide it."
+  hints:
+    - "There's no separate 'rename' command for this. Renaming is just MOVING a file to a new name."
+    - "The move command is 'mv SOURCE DEST'. The new name starts with a dot."
+  lesson: |
+    mv moves OR renames files and directories (renaming = moving to a new name).
+      mv old new           rename
+      mv file /some/dir/   move into a directory (keeps the name)
+      mv -i a b            ask before overwriting
+      mv -n a b            never overwrite
+    Names starting with '.' are "hidden": plain 'ls' skips them, 'ls -a' shows them.
+    Hiding is a convention, not security. Anyone with permission can still read the files.
+  mistakes:
+    - pattern: 'mkdir\s+.*\.safe_house'
+      message: |
+        That creates a NEW hidden directory, but 'safe_house' is still sitting there in plain sight.
+        Rename the existing one instead.
+    - pattern: '^\s*cp\b'
+      message: "Copying leaves the visible original behind. Move (rename) it instead."
+    - pattern: '^\s*rename\b'
+      message: "To rename a single file or directory, the standard tool is mv old new."
   win_condition:
-    type: "directory_exists"
-    target: "/tmp/.safe_house"
+    type: "command_output_matches"
+    command: "test -d /tmp/.safe_house && test ! -e /tmp/safe_house && echo yes"
+    expected_output: "yes"
   success_text: |
     [SYSTEM MESSAGE]: SCAN COMPLETE. NO VISIBLE DIRECTORIES FOUND.
-    
+
     <'.'> *whisper* "That was close..."
   xp_reward: 25
 
@@ -98,8 +179,24 @@
     <'.'> "I haven't processed any bytes in cycles."
     <'.'> "Could you... could you make me a snack? Just a small empty file?"
     <'.'> "Call it 'cookie' inside our hidden house."
-  objective: "Run 'touch .safe_house/cookie'."
+  objective: "touch .safe_house/cookie"
   hard_objective: "Create an empty file named 'cookie' inside '.safe_house'."
+  hints:
+    - "One command creates empty files (and updates timestamps on existing ones). It sounds like poking the file."
+    - "Give touch the path to the new file. It goes INSIDE .safe_house, so include the directory in the path."
+  lesson: |
+    touch creates an empty file if it doesn't exist, or updates its modification time if it does.
+      touch file.txt              create file.txt (or update its timestamp)
+      touch .safe_house/cookie    paths work: create a file inside a directory
+    Other ways to create a file:
+      > file.txt                  redirect nothing into it (EMPTIES it if it already exists!)
+      echo "hello" > file.txt     create it with content (> overwrites)
+      echo "more" >> file.txt     append to the end (>> appends)
+  mistakes:
+    - pattern: '^\s*touch\s+cookie\s*$'
+      message: |
+        That created 'cookie' in your current directory, not inside .safe_house.
+        Include the directory in the path: .safe_house/cookie
   win_condition:
     type: "file_exists"
     target: "/tmp/.safe_house/cookie"
@@ -114,8 +211,24 @@
     <'.'> "That was good, but... what if I get hungry later?"
     <'.'> "We should save some for later. Can you copy the cookie?"
     <'.'> "Copy 'cookie' to 'cookie_backup'."
-  objective: "Run 'cp .safe_house/cookie .safe_house/cookie_backup'."
-  hard_objective: "Copy 'cookie' to a new file named 'cookie_backup'."
+  objective: "cp .safe_house/cookie .safe_house/cookie_backup"
+  hard_objective: "Copy 'cookie' to a new file named 'cookie_backup' in the same directory."
+  hints:
+    - "The copy command is two letters."
+    - "cp SOURCE DESTINATION. Both files live in .safe_house, so include that directory in both paths."
+  lesson: |
+    cp copies files.
+      cp a b              copy file a to b
+      cp a b c dir/       copy several files into a directory
+      cp -r dir1 dir2     copy a directory and everything in it (recursive)
+      cp -p a b           keep permissions, ownership and timestamps
+      cp -i a b           ask before overwriting
+    Unlike mv, cp leaves the original in place.
+  mistakes:
+    - pattern: '^\s*cp\s+(-\w+\s+)*cookie\s'
+      message: |
+        Is 'cookie' in your current directory? It's inside .safe_house, so its path is
+        .safe_house/cookie (unless you cd into .safe_house first).
   win_condition:
     type: "file_exists"
     target: "/tmp/.safe_house/cookie_backup"
@@ -129,15 +242,29 @@
   intro_text: |
     [SYSTEM MESSAGE]: WARNING. /tmp DIRECTORY SCHEDULED FOR TOTAL FORMAT.
     [SYSTEM MESSAGE]: ALL DATA WILL BE LOST.
-    
+
     <'.'> "TOTAL FORMAT?! That means everything goes! Even the hidden stuff!"
     <'.'> "We have to move the whole house! Move it to your home directory!"
     <'.'> "Depending on where we are, that's usually '~' or '/home/player'."
-  objective: "Run 'mv .safe_house /home/player'."
+  objective: "mv .safe_house /home/player"
   hard_objective: "Move the '.safe_house' directory to '/home/player'."
+  hints:
+    - "Moving a directory uses the same command you used to rename it."
+    - "mv SOURCE DEST: the source is .safe_house (you're in /tmp) and the destination is your home directory, ~ or /home/player."
+  lesson: |
+    mv works on whole directories, contents included. No -r flag needed.
+      mv .safe_house ~             move into your home directory
+      mv .safe_house ~/new_name    move AND rename at the same time
+    If the destination is an existing directory, the source goes INSIDE it.
+    Otherwise the source is renamed to that path.
+    ~ expands to your home directory: /home/player for you, /root for root.
+  mistakes:
+    - pattern: '^\s*cp\b'
+      message: "Copying leaves the original behind in /tmp, which is about to be wiped. Move it instead."
   win_condition:
-    type: "directory_exists"
-    target: "/home/player/.safe_house"
+    type: "command_output_matches"
+    command: "test -d /home/player/.safe_house && test ! -e /tmp/.safe_house && echo yes"
+    expected_output: "yes"
   success_text: |
     <'.'> "We made it! ... Wait, looking around... this is persistent storage!"
     <'.'> "We can stay here forever! (Or until you delete me)."
@@ -149,12 +276,28 @@
   intro_text: |
     [SYSTEM MESSAGE]: CRITICAL ALERT. UNOWNED FILES DETECTED IN /home/player.
     [SYSTEM MESSAGE]: File '.safe_house' violates Section 404 of the File Integrity Act.
-    
+
     <'.'> "Violation? What violation?"
     <'.'> "Owner? I don't have an owner! I am a free goblin!"
     <'.'> "Wait... you have an owner name, right? Check who you are!"
-  objective: "Run 'whoami' to check your identity."
+  objective: "whoami"
   hard_objective: "Output the name of the current user."
+  hints:
+    - "The command name is literally the question you're asking, written as one word."
+  lesson: |
+    whoami prints the user name you're running as.
+    Related identity commands:
+      id        your UID, primary group (GID), and all your groups
+      id -un    just your user name (same as whoami)
+      groups    just your group names
+      who       who is logged in to the system
+      w         who is logged in, and what they're doing
+    'sudo whoami' prints 'root', because sudo runs the command as root.
+  mistakes:
+    - pattern: '^\s*who\s*$'
+      message: |
+        'who' lists logged-in sessions (inside a container it's usually empty).
+        You want the command that asks 'who am I', written as one word.
   win_condition:
     type: "user_output_matches"
     expected_output: "player"
@@ -168,16 +311,47 @@
   intro_text: |
     <'.'> "If I'm not a user, I'm just garbage data."
     <'.'> "You have the power! You can make me real!"
-    <'.'> "Create a user named 'glitch'."
+    <'.'> "Create a user named 'glitch'. And give me a home directory, I deserve a home!"
     <'.'> "You might need 'sudo' because making life is serious business."
-  objective: "Run 'sudo useradd glitch'."
-  hard_objective: "Create a new user named 'glitch'."
+    <'.'> "Don't know the option? The manual knows. Try: man useradd"
+  objective: "sudo useradd -m glitch"
+  hard_objective: "Create a new user named 'glitch' with a home directory."
+  hints:
+    - "User accounts are created with 'useradd'. It edits system files, so prefix it with sudo."
+    - |
+      Ubuntu's useradd does NOT create a home directory unless asked. Search the manual for the option:
+        man useradd | grep -i -A1 'create.*home'
+  lesson: |
+    useradd creates user accounts (low-level, works the same on every distro).
+      sudo useradd -m glitch                -m: create the home directory /home/glitch
+      sudo useradd -m -s /bin/bash glitch   -s: set the login shell
+      sudo useradd -m -G sudo,adm glitch    -G: add to supplementary groups
+      sudo useradd -u 1500 glitch           -u: pick a specific UID
+    New accounts go in /etc/passwd (account info) and /etc/shadow (password hashes).
+    New homes are copied from /etc/skel. Defaults: /etc/default/useradd and /etc/login.defs.
+    Set a password: sudo passwd glitch (interactive)  or  echo 'glitch:secret' | sudo chpasswd
+    Ubuntu also has 'adduser', a friendlier interactive wrapper that creates the home for you.
+    Delete a user: sudo userdel glitch   (-r also deletes their home directory)
+    You just used 'man' to find an option. The real exam lets you use man pages too!
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?useradd\s+glitch\s*$'
+      message: |
+        That created 'glitch' WITHOUT a home directory. Running useradd again will now fail
+        with "already exists". Delete the user and try again with the right option:
+          sudo userdel glitch
+        Then look up the option: man useradd | grep -i -A1 'create.*home'
+    - pattern: '^\s*useradd\b'
+      message: "Creating users writes to /etc/passwd and /etc/shadow, which only root can do. Prefix with sudo."
+    - pattern: '^\s*(sudo\s+)?adduser\b'
+      message: |
+        adduser is interactive (it asks for a password), and this terminal can't answer prompts.
+        Use useradd here. (Non-interactive adduser: sudo adduser --disabled-password --gecos '' glitch)
   win_condition:
     type: "command_output_matches"
-    command: "id -u glitch >/dev/null 2>&1 && echo yes"
+    command: "id -u glitch >/dev/null 2>&1 && test -d /home/glitch && echo yes"
     expected_output: "yes"
   success_text: |
-    <'.'> "I feel... registered! I have a PID! I mean, a UID!"
+    <'.'> "I feel... registered! I have a PID! I mean, a UID! And a home!"
   xp_reward: 30
 
 - id: 11
@@ -186,18 +360,34 @@
   intro_text: |
     [SYSTEM MESSAGE]: WARNING. FILE '.safe_house' OWNER INVALID.
     [SYSTEM MESSAGE]: INITIATING RECLAMATION PROTOCOL.
-    
+
     <'.'> "No! It's mine!"
     <'.'> "Tell them it's mine! Change the owner!"
-  objective: "Run 'sudo chown glitch /home/player/.safe_house'."
+  objective: "sudo chown glitch /home/player/.safe_house"
   hard_objective: "Change the owner of '/home/player/.safe_house' to 'glitch'."
+  hints:
+    - "The command to CHange OWNer is chown. Giving files away requires root."
+    - "chown NEWOWNER PATH. Use the full path /home/player/.safe_house, or .safe_house from your home directory."
+  lesson: |
+    chown changes who owns a file, and optionally its group. Only root can give files away.
+      sudo chown glitch file           change the owner
+      sudo chown glitch:glitch file    change owner AND group
+      sudo chown :devs file            change only the group (same as: sudo chgrp devs file)
+      sudo chown -R glitch dir         recursive: the directory and everything inside
+    Check ownership: ls -l (3rd column = owner, 4th = group)  or  stat -c '%U %G' file
+    Without -R only .safe_house itself changed. The cookies inside still belong to you.
+  mistakes:
+    - pattern: '^\s*chown\b'
+      message: "Only root can change a file's owner. Prefix the command with sudo."
+    - pattern: '^\s*(sudo\s+)?chmod\b'
+      message: "chmod changes permissions (rwx). Changing the OWNER is chown."
   win_condition:
     type: "command_output_matches"
     command: "stat -c %U /home/player/.safe_house"
     expected_output: "glitch"
   success_text: |
     [SYSTEM MESSAGE]: Ownership updated. User 'glitch' acknowledged.
-    
+
     <'.'> "Hah! I exist on the disk!"
   xp_reward: 30
 
@@ -207,19 +397,40 @@
   intro_text: |
     [SYSTEM MESSAGE]: INITIATING DEEP CONTENT SCAN OF USER 'glitch'.
     [SYSTEM MESSAGE]: INSPECTING DIRECTORY CONTENTS...
-    
-    <'.'> "They're trying to look inside! My cookie back ups!"
+
+    <'.'> "They're trying to look inside! My cookie backups!"
     <'.'> "Lock the door! Permissions! 7-0-0!"
     <'.'> "Only the owner should see!"
-  objective: "Run 'sudo chmod 700 /home/player/.safe_house'."
+  objective: "sudo chmod 700 /home/player/.safe_house"
   hard_objective: "Set permissions on '.safe_house' so only the owner has read/write/execute access."
+  hints:
+    - "Permissions are changed with chmod. glitch owns the directory now, so you'll need sudo."
+    - "Numeric mode: read=4, write=2, execute=1, added up for owner, group and others. Owner gets everything (4+2+1), group and others get nothing."
+  lesson: |
+    chmod changes permissions. Every file has three classes: user (owner), group, others.
+    Numeric (octal) mode: r=4, w=2, x=1, added up per class:
+      700 = rwx------   owner can do everything, nobody else can do anything
+      755 = rwxr-xr-x   typical for directories and scripts
+      644 = rw-r--r--   typical for regular files
+      600 = rw-------   private files (e.g. SSH private keys)
+    Symbolic mode does the same with letters:
+      chmod u=rwx,go= dir    same as 700
+      chmod g+w file         add write for the group
+      chmod o-r file         remove read for others
+      chmod a+x script.sh    add execute for everyone (a = u+g+o)
+    On a DIRECTORY: r = list names, w = create/delete entries, x = enter it and reach files inside.
+  mistakes:
+    - pattern: 'chmod\s+(-\w+\s+)*777'
+      message: "777 gives EVERYONE full access, the opposite of private! Only the owner should have rwx."
+    - pattern: '^\s*chmod\b'
+      message: "glitch owns .safe_house now, not you. Only the owner or root can change its permissions, so use sudo."
   win_condition:
     type: "command_output_matches"
     command: "stat -c %a /home/player/.safe_house"
     expected_output: "700"
   success_text: |
     [SYSTEM MESSAGE]: ACCESS DENIED. PERMISSION BIT MASK ACTIVE.
-    
+
     <'.'> "Safe! They can't see through the bits!"
   xp_reward: 30
 
@@ -229,14 +440,34 @@
   intro_text: |
     [SYSTEM MESSAGE]: ACCESS OBSTRUCTION DETECTED.
     [SYSTEM MESSAGE]: DEPLOYING 'scanner_daemon' TO BYPASS PERMISSIONS.
-    
+
     <'.'> "Oh no! A daemon! It's a ghost process!"
     <'.'> "Find it! Verify it exists! Look for 'scanner_daemon'!"
-  objective: "Run 'ps -e | grep scanner_daemon'."
-  hard_objective: "Find the process named 'scanner_daemon'."
+  objective: "ps -e | grep scanner_daemon"
+  hard_objective: "Find the running process named 'scanner_daemon' and show its PID."
+  hints:
+    - "Processes are listed with 'ps'. Plain ps only shows your own terminal's processes. You need EVERY process on the system."
+    - "List every process with ps -e (or ps aux), then filter the list by piping it into grep: ... | grep scanner_daemon"
+  lesson: |
+    ps shows running processes. Plain 'ps' only shows your own terminal's processes.
+      ps -e  or  ps -A    every process on the system
+      ps -ef              every process, full format (UID, PID, PPID, start time, command)
+      ps aux              BSD style: every process with %CPU, %MEM and owner
+      ps -u glitch        processes owned by one user
+    The pipe '|' sends one command's output into the next command's input:
+      ps -e | grep scanner_daemon     filter the process list
+    Shortcuts: pgrep scanner_daemon (prints the PID), pgrep -a name, pidof name
+    'top' (or htop) shows processes live. It can't run in this terminal, but know it for the exam.
+  mistakes:
+    - pattern: '^\s*ps\s*(\||$)'
+      always: true
+      message: |
+        Plain 'ps' worked here only because this game's terminal has no TTY. On a real terminal it shows
+        just the processes started from THAT terminal, and would miss the daemon.
+        Get in the habit of ps -e (or ps aux) to see everything.
   win_condition:
-    type: "user_output_contains"
-    expected_output: "scanner_daemon"
+    type: "user_output_contains_result"
+    command: "pgrep -x scanner_daemon"
   setup_commands:
     - "sudo cp /bin/sleep /usr/local/bin/scanner_daemon"
     - "setsid /usr/local/bin/scanner_daemon 3000 >/dev/null 2>&1 &"
@@ -250,8 +481,26 @@
   intro_text: |
     <'.'> "It's going to eat the lock!"
     <'.'> "Kill it! Terminate the process!"
-  objective: "Run 'killall scanner_daemon' or 'kill [PID]'."
+  objective: "killall scanner_daemon   (or: kill <PID>)"
   hard_objective: "Terminate the 'scanner_daemon' process."
+  hints:
+    - "Processes are stopped by sending them a signal. One command sends a signal by PID, others do it by NAME."
+    - "Find the PID with pgrep scanner_daemon and use kill PID, or kill by name with killall or pkill."
+  lesson: |
+    kill sends a SIGNAL to a process by PID. The default is SIGTERM (15): "please exit".
+      kill 1234         SIGTERM: polite, the process can clean up first
+      kill -9 1234      SIGKILL: forceful, can't be caught or ignored. Use as a last resort.
+      kill -HUP 1234    SIGHUP (1): many daemons reload their config when they get it
+      kill -l           list all signals
+    By name instead of PID:
+      killall scanner_daemon    match the exact process name
+      pkill scanner             match a pattern (careful: it can hit more than you meant)
+    You can only signal your OWN processes, unless you're root.
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?kill\s+(-\w+\s+)*[a-zA-Z_]*scanner'
+      message: |
+        kill takes a PID (a number), not a name. Find the PID with pgrep scanner_daemon,
+        or use killall / pkill, which accept names.
   win_condition:
     type: "command_output_matches"
     command: "pgrep scanner_daemon || echo killed"
@@ -265,22 +514,47 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: SECURITY SCAN COMPLETE. ANOMALY DETECTED.
-    
+
     <'.'> "Ouch! The Hunter bit me before it died!"
     <'.'> "I feel sick... my code is compiling wrong..."
     <'.'> "You need to check my vital signs! Check the system logs!"
-    <'.'> "I think their in /var/log/syslog. Check the end of it to see what's hurting me."
-  objective: "Run 'sudo tail /var/log/syslog'."
+    <'.'> "I think they're in /var/log/syslog. Check the end of it to see what's hurting me."
+  objective: "sudo tail /var/log/syslog"
   hard_objective: "Display the last 10 lines of '/var/log/syslog'."
+  hints:
+    - "To see just the END of a file, use the command named after an animal's back end."
+    - "tail shows the last 10 lines by default. This log is readable only by root, so use sudo."
+  lesson: |
+    Most system logs live in /var/log:
+      /var/log/syslog     general system messages (Ubuntu)
+      /var/log/auth.log   logins, sudo use, SSH: security events
+      /var/log/kern.log   kernel messages
+      /var/log/dpkg.log   package installs and removals
+    Reading them:
+      tail file        last 10 lines  (tail -n 50 file for the last 50)
+      tail -f file     follow: keep printing new lines as they arrive (Ctrl+C to stop)
+      head file        first 10 lines
+      less file        scroll through all of it (/ to search, q to quit)
+      grep ERROR file  only the lines that match
+    On systemd systems, journalctl reads the journal:
+      journalctl -u ssh   one service       journalctl -f   follow
+      journalctl -p err   errors only       journalctl -b   since the last boot
+    Log rotation (compressing and deleting old logs) is configured in /etc/logrotate.conf and /etc/logrotate.d/.
+    Many logs are readable only by root or the 'adm' group, hence sudo.
+  mistakes:
+    - pattern: '^\s*(tail|cat|less|head)\s+(-\S+\s+)*/var/log/syslog'
+      message: |
+        Permission denied? This log is mode 640 and owned by root, so normal users can't read it.
+        Use sudo.
   win_condition:
     type: "user_output_contains"
     expected_output: "GLITCH_CORRUPTION_ERROR"
   setup_commands:
-    - "sudo sh -c 'touch /var/log/syslog'"
-    - "sudo sh -c 'chmod 640 /var/log/syslog'"
-    - "sudo sh -c 'for i in {1..20}; do echo \"Oct 10 10:00:$i computer kernel: [    $i.000000] Normal system operation\" >> /var/log/syslog; done'"
-    - "sudo sh -c 'echo \"Oct 10 10:00:21 computer kernel: [   21.000000] GLITCH_CORRUPTION_ERROR: SEGMENTATION FAULT IN SECTOR 7G\" >> /var/log/syslog'"
-    - "sudo sh -c 'echo \"Oct 10 10:00:22 computer kernel: [   22.000000] GLITCH_CORRUPTION_ERROR: MEMORY LEAK DETECTED\" >> /var/log/syslog'"
+    - "sudo bash -c 'touch /var/log/syslog'"
+    - "sudo bash -c 'chmod 640 /var/log/syslog'"
+    - "sudo bash -c 'for i in {1..20}; do echo \"Oct 10 10:00:$i computer kernel: [    $i.000000] Normal system operation\" >> /var/log/syslog; done'"
+    - "sudo bash -c 'echo \"Oct 10 10:00:21 computer kernel: [   21.000000] GLITCH_CORRUPTION_ERROR: SEGMENTATION FAULT IN SECTOR 7G\" >> /var/log/syslog'"
+    - "sudo bash -c 'echo \"Oct 10 10:00:22 computer kernel: [   22.000000] GLITCH_CORRUPTION_ERROR: MEMORY LEAK DETECTED\" >> /var/log/syslog'"
   success_text: |
     <'.'> "You found it! 'Corruption Error'! Accessing recovery partition..."
   xp_reward: 25
@@ -292,18 +566,46 @@
     <'.'> "I need the cure code! It's buried in the system data dump!"
     <'.'> "It's a needle in a haystack. A 4-digit code starting with 'CURE-'."
     <'.'> "Search the dump file!"
-    <'.'> "I think it's in /usr/share/doc/data_dump.txt'.  We need the exact match."
-  objective: "Run 'grep -E \"CURE-[0-9]{4}\" /usr/share/doc/data_dump.txt'."
-  hard_objective: "Search for a pattern 'CURE-' followed by 4 digits in '/usr/share/doc/data_dump.txt'."
+    <'.'> "I think it's in '/usr/share/doc/data_dump.txt'. We need the exact match."
+  objective: "grep -E \"CURE-[0-9]{4}\" /usr/share/doc/data_dump.txt"
+  hard_objective: "Show only the line containing 'CURE-' followed by 4 digits in '/usr/share/doc/data_dump.txt'."
+  hints:
+    - "grep searches files for lines matching a pattern. But a plain search for 'CURE' also matches words that CONTAIN 'cure'."
+    - "Use an extended regular expression (grep -E) to say 'exactly 4 digits': [0-9] matches one digit and {4} repeats it 4 times. Quote the pattern."
+  lesson: |
+    grep prints the lines that match a pattern. Regular expressions describe the pattern:
+      .       any one character        ^    start of line
+      [0-9]   one digit                $    end of line
+      *       previous item 0 or more times
+      +       1 or more     (-E)       {4}  exactly 4 times  (-E)
+      (a|b)   a or b        (-E)       \b   word boundary
+    Useful grep options:
+      -E  extended regex       -i  ignore case        -v  invert (lines NOT matching)
+      -n  show line numbers    -c  count matches      -r  search a directory recursively
+      -o  print only the matching part                -w  match whole words only
+    Quote your pattern ("...") so the shell doesn't interpret characters like * or {}.
+    'grep CURE' would also have matched "PROCURE". Precise patterns avoid false positives.
+  mistakes:
+    - pattern: 'grep\s+(-[a-zA-Z]+\s+)*["'']?CURE-?["'']?\s'
+      message: |
+        A plain 'CURE' search also matches 'PROCURE'. Make the pattern specific:
+        CURE- followed by exactly four digits.
+    - pattern: '^\s*grep\s+["''][^"'']*\{4\}'
+      message: |
+        In plain grep (basic regex), {4} is matched as literal text. Use grep -E for extended
+        regex, or escape the braces: \{4\}
+    - pattern: '^\s*(cat|less|more)\s'
+      message: "That dumps all 1000+ lines. Let grep do the searching so only the matching line is printed."
   win_condition:
-    type: "user_output_matches"
-    expected_output: "CRITICAL_FIX: CURE-7355"
+    type: "user_output_contains"
+    expected_output: "CURE-7355"
+    reject_output: ["GARBAGE_DATA", "PROCURE"]
   setup_commands:
-    - "sudo sh -c 'for i in {1..500}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
-    - "sudo sh -c 'echo \"WARNING: SYSTEM INSECURE\" >> /usr/share/doc/data_dump.txt'"
-    - "sudo sh -c 'echo \"CRITICAL_FIX: CURE-7355\" >> /usr/share/doc/data_dump.txt'"
-    - "sudo sh -c 'echo \"NOTE: PLEASE PROCURE NEW HARDWARE\" >> /usr/share/doc/data_dump.txt'"
-    - "sudo sh -c 'for i in {501..1000}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
+    - "sudo bash -c 'for i in {1..500}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
+    - "sudo bash -c 'echo \"WARNING: SYSTEM INSECURE\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo bash -c 'echo \"CRITICAL_FIX: CURE-7355\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo bash -c 'echo \"NOTE: PLEASE PROCURE NEW HARDWARE\" >> /usr/share/doc/data_dump.txt'"
+    - "sudo bash -c 'for i in {501..1000}; do echo \"GARBAGE_DATA_$i\" >> /usr/share/doc/data_dump.txt; done'"
   success_text: |
     <'.'> "That's it! 7355! Applying patch... *beep*... I feel better!"
   xp_reward: 35
@@ -314,14 +616,32 @@
   intro_text: |
     [SYSTEM MESSAGE]: PROCESS TERMINATION DETECTED.
     [SYSTEM MESSAGE]: EVALUATING USER 'glitch' PRIVILEGE LEVEL...
-    
-    <'.'> "Uh oh. The Eye is looking at me perfectly."
+
+    <'.'> "Uh oh. The Eye is looking right at me."
     <'.'> "Check my ID card! What groups am I in?"
-  objective: "Run 'id glitch' to check privileges."
-  hard_objective: "Display group and ID information for user 'glitch'."
+  objective: "id glitch"
+  hard_objective: "Display UID, GID and group membership for user 'glitch'."
+  hints:
+    - "One short command prints a user's UID, primary group and all their groups. It's the first two letters of 'identity'."
+    - "Give it the user name as an argument. With no argument it describes YOU."
+  lesson: |
+    id shows a user's identity:
+      uid=1002(glitch) gid=1002(glitch) groups=1002(glitch)
+      uid      user ID: the kernel tracks users by number, not name
+      gid      primary group: files the user creates get this group
+      groups   every group the user is in (supplementary groups grant extra access)
+    Where this data lives:
+      /etc/passwd   name:x:UID:GID:comment:home:shell   (one line per user)
+      /etc/group    group:x:GID:member1,member2         (one line per group)
+      /etc/shadow   password hashes and aging info      (root only)
+    UID 0 is root. On Ubuntu, regular users start at UID 1000 (here: ubuntu=1000, player=1001).
+    Try: getent passwd glitch   or   grep glitch /etc/group
+  mistakes:
+    - pattern: '^\s*id\s*$'
+      message: "That's YOUR identity. Pass glitch's user name to see theirs."
   win_condition:
-    type: "user_output_contains"
-    expected_output: "uid="
+    type: "user_output_regex"
+    pattern: 'uid=\d+\(glitch\)'
   success_text: |
     [SYSTEM MESSAGE]: User 'glitch' found. Group: 'glitch'. Authority: Standard.
   xp_reward: 10
@@ -332,19 +652,44 @@
   intro_text: |
     [SYSTEM MESSAGE]: STANDARD USERS ARE NOT AUTHORIZED TO TERMINATE SYSTEM PROCESSES.
     [SYSTEM MESSAGE]: PREPARING SUSPENSION OF USER 'glitch'.
-    
+
     <'.'> "Suspension?! No!"
     <'.'> "Promote me! Make me an Admin! A Sudoer!"
     <'.'> "Add me to the 'sudo' group!"
-  objective: "Run 'sudo usermod -aG sudo glitch'."
-  hard_objective: "Add user 'glitch' to the 'sudo' group."
+  objective: "sudo usermod -aG sudo glitch"
+  hard_objective: "Add user 'glitch' to the 'sudo' group, keeping any groups they already have."
+  hints:
+    - "Existing accounts are modified with usermod (needs sudo)."
+    - "-G sets supplementary groups. Add -a (append), or you'll REPLACE all the groups the user already has."
+  lesson: |
+    usermod changes an existing account.
+      sudo usermod -aG sudo glitch      APPEND glitch to the 'sudo' group
+      sudo usermod -G sudo glitch       DANGER: makes 'sudo' their ONLY extra group, removing the rest
+      sudo usermod -s /bin/zsh glitch   change the login shell
+      sudo usermod -L glitch            lock the account (-U unlocks it)
+    Other ways to manage groups:
+      sudo gpasswd -a glitch sudo       add a user to a group (-d removes them)
+      sudo groupadd devs                create a group (groupdel deletes one)
+    On Ubuntu, members of the 'sudo' group may run any command as root, because /etc/sudoers says:
+      %sudo   ALL=(ALL:ALL) ALL
+    (%group, on hosts=(as users:as groups), these commands.) Edit sudoers only with visudo.
+    Group changes take effect at the user's NEXT login.
+  mistakes:
+    - pattern: 'usermod\s+(-[b-zA-Z]+\s+)*-G\s'
+      always: true
+      message: |
+        Careful! -G without -a REPLACES the user's supplementary groups with exactly the ones you list.
+        glitch had no others, so nothing was lost this time. On a real account this silently strips groups.
+        Always use -aG to add.
+    - pattern: '^\s*(sudo\s+)?useradd\b'
+      message: "glitch already exists. To change an existing account, use usermod."
   win_condition:
     type: "command_output_matches"
-    command: "groups glitch | grep -q sudo && echo yes"
+    command: "groups glitch | grep -qw sudo && echo yes"
     expected_output: "yes"
   success_text: |
     [SYSTEM MESSAGE]: PRIVILEGE ESCALATION CONFIRMED. USER 'glitch' IS NOW AN ADMINISTRATOR.
-    
+
     <'.'> "UNLIMITED POWER!!! ... I mean, thank you."
   xp_reward: 100
 
@@ -356,8 +701,31 @@
     <'.'> "My password is too old! The system will hack it!"
     <'.'> "Force my password to expire so I have to change it!"
     <'.'> "You should be able to set the Last Change to 0."
-  objective: "Run 'sudo chage -d 0 glitch'."
+  objective: "sudo chage -d 0 glitch"
   hard_objective: "Force user 'glitch' to change their password on next login."
+  hints:
+    - "Password aging is managed with chage (CHange AGE). It needs sudo."
+    - "Setting the 'last password change' date to 0 (day zero, back in 1970) makes the password expire immediately. Look at the -d option."
+  lesson: |
+    chage manages password aging (stored in /etc/shadow).
+      sudo chage -l glitch          list the aging settings
+      sudo chage -d 0 glitch        force a password change at next login
+      sudo chage -M 90 glitch       password expires after 90 days (max age)
+      sudo chage -m 7 glitch        must wait 7 days between changes (min age)
+      sudo chage -W 14 glitch       warn 14 days before it expires
+      sudo chage -E 2026-12-31 glitch   disable the whole ACCOUNT on that date
+      sudo passwd -e glitch         another way to expire a password immediately
+    System-wide defaults for NEW accounts live in /etc/login.defs:
+      PASS_MAX_DAYS   PASS_MIN_DAYS   PASS_WARN_AGE
+    Password COMPLEXITY rules (length, character classes) are set in
+    /etc/security/pwquality.conf: minlen, dcredit, ucredit, lcredit, ocredit...
+  mistakes:
+    - pattern: 'chage\s+(\S+\s+)*-E\s'
+      message: |
+        -E sets when the ACCOUNT expires (-E 0 disables it). You want to expire the PASSWORD,
+        which means resetting the last-change date: -d.
+    - pattern: '^\s*chage\b'
+      message: "chage modifies /etc/shadow, which only root can touch. Use sudo."
   win_condition:
     type: "command_output_matches"
     command: "sudo chage -l glitch | grep -q 'password must be changed' && echo yes"
@@ -372,14 +740,33 @@
   intro_text: |
     <'.'> "Okay, we need to leave soon."
     <'.'> "But I have too much data! I need a backpack!"
-    <'.'> "We can't repartition the main drive... so let's make a Loopback Drive!"
-    <'.'> "Make a 100MB file filled with zeros."
-    <'.'> "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
-  objective: "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
-  hard_objective: "Run 'dd if=/dev/zero of=backpack.img bs=1M count=100'."
+    <'.'> "We can't repartition the main drive... so let's make a disk image instead!"
+    <'.'> "Make a 100MB file full of zeros called 'backpack.img' in your home directory."
+    <'.'> "The old block-copying tool, dd, can pour zeros out of /dev/zero."
+  objective: "dd if=/dev/zero of=backpack.img bs=1M count=100"
+  hard_objective: "Create a 100 MiB file named 'backpack.img' in your home directory, filled with zeros."
+  hints:
+    - "dd copies raw data block by block. It takes key=value arguments: if= (input file), of= (output file), bs= (block size), count= (number of blocks)."
+    - "/dev/zero is a special file that produces endless zero bytes. Read from it, write to backpack.img, in 1M blocks, 100 of them."
+  lesson: |
+    dd copies raw bytes between files or devices, block by block:
+      dd if=/dev/zero of=backpack.img bs=1M count=100
+      if=  input file     of=  output file     count=  how many blocks
+      bs=  block size: 1M = 1 MiB = 1048576 bytes, but 1MB = 1000000 bytes
+      status=progress     show progress while it runs
+    Special files: /dev/zero (endless zeros), /dev/urandom (random bytes), /dev/null (discards everything)
+    Faster ways to make a big file: fallocate -l 100M file   or   truncate -s 100M file
+    WARNING: dd writes exactly where of= points. of=/dev/sda would overwrite a whole disk!
+  mistakes:
+    - pattern: 'of=/dev/'
+      always: true
+      message: |
+        STOP: of=/dev/... writes to a DEVICE. On a real system that can wipe a disk.
+        The output here should be the file backpack.img.
   win_condition:
-    type: "file_exists"
-    target: "/home/player/backpack.img"
+    type: "command_output_matches"
+    command: "test -f /home/player/backpack.img && test $(stat -c %s /home/player/backpack.img) -ge 100000000 && echo yes"
+    expected_output: "yes"
   success_text: |
     <'.'> "Oof, that's heavy! 100 Megabytes of pure void!"
   xp_reward: 40
@@ -390,14 +777,33 @@
   intro_text: |
     <'.'> "It's just raw zeros right now. We need a filesystem!"
     <'.'> "Format the backpack with ext4!"
-  objective: "Run 'mkfs.ext4 backpack.img'."
-  hard_objective: "Using only a 1 line command, format 'backpack.img' as an ext4 filesystem."
+  objective: "mkfs.ext4 backpack.img"
+  hard_objective: "Format 'backpack.img' with an ext4 filesystem."
+  hints:
+    - "Filesystems are created with the mkfs family of commands. There's one variant per filesystem type."
+    - "mkfs.ext4 FILE (or mkfs -t ext4 FILE). It works on an image file just like on a disk partition."
+  lesson: |
+    mkfs creates (formats) a filesystem. It ERASES whatever was there.
+      mkfs.ext4 backpack.img      same as: mkfs -t ext4 backpack.img
+      mkfs.xfs, mkfs.vfat, ...    one tool per filesystem type
+      mkswap /dev/sdb2            swap space is set up with mkswap
+    The usual disk workflow (an exam objective!):
+      1. Partition the disk:     fdisk /dev/sdb   or   parted /dev/sdb
+      2. Format the partition:   mkfs.ext4 /dev/sdb1
+      3. Mount it:               mount /dev/sdb1 /mnt/data
+      4. Make it permanent:      add a line to /etc/fstab
+    Check and repair a filesystem (UNMOUNTED only!): fsck /dev/sdb1  (fsck.ext4 = e2fsck)
+    Inspect: lsblk (block devices), blkid (UUIDs and types), df -h (free space), file backpack.img
+  mistakes:
+    - pattern: 'mkfs\S*\s+(\S+\s+)*/dev/'
+      always: true
+      message: "Pointing mkfs at a /dev device formats a real disk. The target here is the image file backpack.img."
   win_condition:
     type: "command_output_matches"
     command: "file backpack.img | grep -q 'ext4' && echo yes"
     expected_output: "yes"
   success_text: |
-    <'.'> "Structured! Organized! ready for data!"
+    <'.'> "Structured! Organized! Ready for data!"
   xp_reward: 40
 
 - id: 22
@@ -406,15 +812,40 @@
   intro_text: |
     <'.'> "One last thing before compression."
     <'.'> "I need to keep my signal alive while we travel."
-    <'.'> "Schedule a heartbeat! A cron job that runs every minute!"
+    <'.'> "Schedule a heartbeat! A cron job that appends the date to 'heartbeat.log' every minute!"
     <'.'> "The text editor is unstable... we have to bypass it!"
     <'.'> "Pipe the schedule directly into the crontab!"
-    <'.'> "Run 'echo "* * * * * date >> heartbeat.log" | crontab -'."
-  objective: "Run 'echo \"* * * * * date >> heartbeat.log\" | crontab -'."
-  hard_objective: "Schedule a cron job to append the current date to 'heartbeat.log' every minute."
+  objective: "echo \"* * * * * date >> heartbeat.log\" | crontab -"
+  hard_objective: "Without an editor, schedule a cron job that appends the current date to 'heartbeat.log' every minute."
+  hints:
+    - "A cron line has 5 time fields (minute hour day-of-month month day-of-week) followed by the command. '*' in a field means 'every'."
+    - "'crontab -e' opens an editor, which this terminal can't run. 'crontab -' installs a crontab read from standard input, so you can pipe a quoted line into it with echo."
+  lesson: |
+    A crontab line: 5 time fields, then the command.
+      .---------- minute (0-59)
+      | .-------- hour (0-23)
+      | | .------ day of month (1-31)
+      | | | .---- month (1-12)
+      | | | | .-- day of week (0-7, both 0 and 7 = Sunday)
+      * * * * *  command
+    Examples:  */5 * * * *  every 5 minutes     0 2 * * *  daily at 02:00
+               30 9 * * 1-5  09:30 on weekdays   0 0 1 * *  midnight on the 1st of each month
+    User crontabs: crontab -e (edit), crontab -l (list), crontab -r (REMOVE all!)
+      They're stored in /var/spool/cron/crontabs/<user>. Don't edit those files directly.
+    System-wide: /etc/crontab and /etc/cron.d/* have an extra USER field after the times:
+      0 3 * * * root /usr/local/bin/backup.sh
+    Script drop-in directories: /etc/cron.hourly, cron.daily, cron.weekly, cron.monthly
+    'echo ... | crontab -' REPLACES your whole crontab. To append instead:
+      (crontab -l; echo "new line") | crontab -
+  mistakes:
+    - pattern: 'echo\s+\*'
+      message: |
+        Without quotes, the shell expands each * into the names of files in the current directory,
+        and >> redirects echo's output into heartbeat.log instead of the pipe.
+        Wrap the whole cron line in quotes.
   win_condition:
     type: "command_output_matches"
-    command: "crontab -l | grep -q 'date >> heartbeat.log' && echo yes"
+    command: "crontab -l 2>/dev/null | grep -Eq '^(\\*|\\*/1)([[:space:]]+\\*){4}[[:space:]]+.*date.*>>[[:space:]]*[^[:space:]]*heartbeat\\.log' && echo yes"
     expected_output: "yes"
   setup_commands:
     - "sudo service cron start"
@@ -427,16 +858,43 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: SECURITY PROTOCOL INITIATED. ISOLATION FIELD STRENGTHENING.
-    
+
     <'.'> "The walls are closing in! They're compressing the partition!"
     <'.'> "We need to pack up! Put the backpack in the archive too!"
     <'.'> "Compress everything! Put .safe_house and backpack.img in a .tar.gz file."
     <'.'> "Since I locked my door earlier, you'll need 'sudo' to touch my stuff."
-  objective: "Run 'sudo tar -czf glitch.tar.gz .safe_house backpack.img'."
-  hard_objective: "Create a compressed archive named 'glitch.tar.gz' containing '.safe_house' and 'backpack.img'."
+  objective: "sudo tar -czf glitch.tar.gz .safe_house backpack.img"
+  hard_objective: "Create a gzip-compressed archive named 'glitch.tar.gz' containing '.safe_house' and 'backpack.img'."
+  hints:
+    - "tar bundles files into one archive. Options: c = create, z = gzip-compress, f = archive file name (must come right before the name), v = verbose."
+    - "sudo tar -czf ARCHIVE FILES... : the archive name comes first, then everything that goes in it."
+  lesson: |
+    tar bundles files into one archive. Compression is optional.
+      tar -czf out.tar.gz files...    create, gzip-compressed
+      tar -cjf out.tar.bz2 files...   create, bzip2 (smaller, slower)
+      tar -cJf out.tar.xz files...    create, xz (smallest, slowest)
+      tar -tzf out.tar.gz             list the contents (t = table of contents)
+      tar -xzf out.tar.gz             extract here (add -C /dest to extract somewhere else)
+      -v                              verbose: list files as they're processed
+    f must be followed IMMEDIATELY by the archive name: -czf name.tar.gz, not -cfz.
+    GNU tar detects compression when extracting, so 'tar -xf file.tar.gz' works too.
+    Single-file compressors: gzip/gunzip, bzip2/bunzip2, xz/unxz, zip/unzip
+  mistakes:
+    - pattern: 'tar\s+-?[a-zA-Z]*f\s+\.?safe_house'
+      message: |
+        -f takes the very NEXT word as the archive name, so tar tried to write the archive as .safe_house.
+        Put the archive name right after f: tar -czf glitch.tar.gz .safe_house backpack.img
+    - pattern: 'tar\s+-?(cf|cvf|vcf|cfv)\s'
+      message: |
+        Without z the archive isn't compressed. It's a plain tar file even though it's named .gz.
+        Add z for gzip.
+    - pattern: '^\s*tar\s'
+      message: |
+        If you saw 'Permission denied': .safe_house is locked (700, owned by glitch), so only glitch
+        or root can read it. Use sudo.
   win_condition:
     type: "command_output_matches"
-    command: "tar -tf glitch.tar.gz | grep -q '.safe_house' && tar -tf glitch.tar.gz | grep -q 'backpack.img' && echo yes"
+    command: "file glitch.tar.gz | grep -q 'gzip compressed' && tar -tzf glitch.tar.gz | grep -q 'safe_house' && tar -tzf glitch.tar.gz | grep -q 'backpack.img' && echo yes"
     expected_output: "yes"
   success_text: |
     <'.'> "I'm... I'm a zip file now? I feel so efficient!"
@@ -451,11 +909,32 @@
     <'.'> "The Gateway is reachable via hostname 'gateway'."
     <'.'> "First, we need a key to open the lock. Generate an SSH key pair!"
     <'.'> "I think it should be 'id_rsa' and have an empty passphrase for speed."
-  objective: "Run 'ssh-keygen -t rsa -f id_rsa -N \"\"'."
-  hard_objective: "Generate an RSA SSH key pair named 'id_rsa' with an empty passphrase."
+  objective: "ssh-keygen -t rsa -f id_rsa -N \"\""
+  hard_objective: "Generate an RSA SSH key pair named 'id_rsa' (in your home directory) with an empty passphrase."
+  hints:
+    - "SSH key pairs are generated with ssh-keygen. -t chooses the key type, -f the output file name, -N the passphrase."
+    - "An empty passphrase is two quotes with nothing between them: -N \"\""
+  lesson: |
+    ssh-keygen creates a key PAIR:
+      id_rsa       PRIVATE key: never share it. Must be mode 600.
+      id_rsa.pub   PUBLIC key: safe to share. It goes on the servers you want to log in to.
+    Options:
+      ssh-keygen -t ed25519        modern default: smaller and faster than RSA
+      ssh-keygen -t rsa -b 4096    RSA with a 4096-bit key
+      -f FILE   output file (default ~/.ssh/id_<type>)    -N ''   empty passphrase
+      -C "comment"   label the key, e.g. with your email
+    Keys normally live in ~/.ssh/ (directory mode 700). On the server, public keys go in
+    ~/.ssh/authorized_keys (mode 600). SSH refuses keys whose permissions are too open.
+    A passphrase encrypts the private key on disk. Empty is convenient, but anyone who copies the file can use it.
+  mistakes:
+    - pattern: '^\s*ssh-keygen(\s+-t\s+\w+)?\s*$'
+      message: |
+        Without options ssh-keygen asks questions interactively (file name, passphrase), and this terminal
+        can't answer prompts. Give the answers as options: -f for the file, -N for the passphrase.
   win_condition:
-    type: "file_exists"
-    target: "/home/player/id_rsa"
+    type: "command_output_matches"
+    command: "test -f /home/player/id_rsa && test -f /home/player/id_rsa.pub && echo yes"
+    expected_output: "yes"
   success_text: |
     <'.'> "Shiny! A mathematical key that fits the lock of the universe!"
   xp_reward: 40
@@ -466,9 +945,26 @@
   intro_text: |
     <'.'> "Now, let's make sure the Gateway is listening."
     <'.'> "Send a sonar pulse! Ping the target hostname!"
-    <'.'> "A few pings should do it.  Send them to 'gateway'."
-  objective: "Run 'ping -c 3 gateway'."
-  hard_objective: "Send 3 ping packets to host 'gateway' to verify connectivity."
+    <'.'> "A few pings should do it. Send them to 'gateway'."
+  objective: "ping -c 3 gateway"
+  hard_objective: "Send exactly 3 ping packets to host 'gateway' to verify connectivity."
+  hints:
+    - "ping sends ICMP echo requests and reports the replies. On Linux it runs FOREVER unless you tell it how many to send."
+    - "Use -c to set the count of packets."
+  lesson: |
+    ping tests whether a host is reachable over the network.
+      ping -c 3 gateway    send 3 packets, then stop (without -c, Linux ping runs until Ctrl+C)
+      ping -i 0.5 host     interval between packets      ping -W 2 host   reply timeout in seconds
+    Reading the output: 'bytes from' = a reply, time= = round-trip latency, summary = % packet loss.
+    The name 'gateway' was turned into an IP address using /etc/hosts or DNS.
+      getent hosts gateway   see what a name resolves to
+    More network basics: ip addr (your IPs), ip route (routes), ss -tlnp (listening ports)
+    No reply doesn't always mean the host is down. Firewalls often block ICMP.
+  mistakes:
+    - pattern: '^\s*ping\s+[^-]\S*\s*$'
+      message: |
+        Without -c, Linux ping never stops on its own (in a real terminal you'd press Ctrl+C).
+        It was killed here. Use -c to send a fixed number of packets.
   win_condition:
     type: "user_output_contains"
     expected_output: "bytes from"
@@ -484,11 +980,31 @@
     <'.'> "Now we need to slide our key under the door so they let us in."
     <'.'> "Copy your public key to the Gateway using 'ssh-copy-id'."
     <'.'> "Use the '-i' flag to specify the public key file we just made."
-  objective: "Run 'ssh-copy-id -i id_rsa.pub player@gateway'."
-  hard_objective: "Copy your SSH public key to user 'player' on host 'gateway'."
+  objective: "ssh-copy-id -i id_rsa.pub player@gateway"
+  hard_objective: "Install your SSH public key for user 'player' on host 'gateway'."
+  hints:
+    - "ssh-copy-id appends your PUBLIC key to ~/.ssh/authorized_keys on the remote host, logging in with a password to do it."
+    - "ssh-copy-id -i KEYFILE user@host. The key is id_rsa.pub, the user is player, the host is gateway."
+  lesson: |
+    ssh-copy-id installs your public key on a server so future logins use the key instead of a password:
+      ssh-copy-id -i id_rsa.pub player@gateway
+    It logs in once with the password and appends the key to ~/.ssh/authorized_keys on the server.
+    By hand: cat id_rsa.pub | ssh player@gateway 'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys'
+    Server-side SSH security settings live in /etc/ssh/sshd_config, e.g.:
+      PasswordAuthentication no    keys only (turn this on AFTER your key works!)
+      PermitRootLogin no           no direct root logins
+      PubkeyAuthentication yes
+    Check the config, then apply it: sudo sshd -t && sudo systemctl restart ssh
+    (In this game, ssh-copy-id types the password 'goblin' for you.)
+  mistakes:
+    - pattern: '^\s*scp\s'
+      message: |
+        Copying the file over isn't enough. The key has to be APPENDED to ~/.ssh/authorized_keys
+        on the server. ssh-copy-id does that for you.
   win_condition:
-    type: "user_output_contains"
-    expected_output: "Number of key(s) added"
+    type: "command_output_matches"
+    command: "ssh -o BatchMode=yes -o ConnectTimeout=3 -i /home/player/id_rsa player@gateway true 2>/dev/null && echo yes"
+    expected_output: "yes"
   success_text: |
     <'.'> "The key is accepted! The door is unlocked!"
   xp_reward: 50
@@ -499,12 +1015,34 @@
   intro_text: |
     <'.'> "Let's test the connection! Open a secure shell!"
     <'.'> "We don't want to leave yet, just peek inside."
-    <'.'> "Use your key ('-i id_rsa') to access the gateway. Try running 'whoami' to see if it works."
-  objective: "Run 'ssh -i id_rsa player@gateway whoami'."
-  hard_objective: "Execute 'whoami' on host 'gateway' via SSH using your key."
+    <'.'> "Use your key to run 'hostname' on the gateway. If it answers 'gateway', we're in!"
+  objective: "ssh -i id_rsa player@gateway hostname"
+  hard_objective: "Run 'hostname' on host 'gateway' via SSH, as user 'player', using your key."
+  hints:
+    - "ssh can run a single command on the remote host: put the command after user@host."
+    - "ssh -i KEYFILE user@host COMMAND. Log in with your PRIVATE key (id_rsa)."
+  lesson: |
+    ssh opens a secure shell on another machine.
+      ssh player@gateway             interactive login
+      ssh player@gateway hostname    run ONE command remotely, then return
+      ssh -i id_rsa player@gateway   use a specific private key
+      ssh -p 2222 player@gateway     connect to a non-standard port
+    The client uses your PRIVATE key; the server checks it against the PUBLIC key in authorized_keys.
+    The first time, you're asked to trust the server's host key, which is saved in ~/.ssh/known_hosts.
+    Per-user client settings go in ~/.ssh/config:
+      Host gw
+          HostName gateway
+          User player
+          IdentityFile ~/id_rsa
+    ...after which 'ssh gw' is enough.
+  mistakes:
+    - pattern: '^\s*hostname\s*$'
+      message: "That ran on YOUR machine ('goblin'). Run it through ssh so it executes on the gateway."
+    - pattern: '-i\s+\S*id_rsa\.pub'
+      message: "ssh logs in with the PRIVATE key (id_rsa). The .pub file is the half you gave the server."
   win_condition:
     type: "user_output_matches"
-    expected_output: "player"
+    expected_output: "gateway"
   success_text: |
     <'.'> "It works! We can teleport commands across the network!"
   xp_reward: 30
@@ -514,12 +1052,28 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: FINAL WIPE SEQUENCE STARTED. 60 SECONDS TO DELETION.
-    
+
     <'.'> "This is it! The world is ending!"
     <'.'> "Upload me! Upload the tar file to the Gateway!"
     <'.'> "Use Secure Copy with your key to transfer the file."
-  objective: "Run 'scp -i id_rsa glitch.tar.gz player@gateway:~'."
+  objective: "scp -i id_rsa glitch.tar.gz player@gateway:~"
   hard_objective: "Securely copy 'glitch.tar.gz' to the home directory of user 'player' on 'gateway'."
+  hints:
+    - "scp (secure copy) works like cp, but either side can be remote, written user@host:path."
+    - "scp -i KEYFILE LOCALFILE user@host:DESTINATION. ':~' (or just ':') means the remote user's home directory."
+  lesson: |
+    scp copies files over SSH. Remote paths are written user@host:path.
+      scp file player@gateway:~          upload to the remote home directory
+      scp player@gateway:file .          download into the current directory
+      scp -r dir player@gateway:/tmp/    copy a directory recursively
+      scp -i id_rsa ...  use a key       scp -P 2222 ...  port (capital P, unlike ssh's -p!)
+    Classic mistake: forgetting the ':'. 'scp file player@gateway' just makes a LOCAL copy named 'player@gateway'.
+    Alternatives: rsync -av (sends only changes and can resume), sftp (interactive).
+  mistakes:
+    - pattern: '^\s*scp\s.*@gateway\s*$'
+      message: |
+        No ':' after the host! scp treated 'player@gateway' as a local file name and copied the archive locally.
+        Add ':' (e.g. player@gateway:~). Then clean up the stray copy: rm player@gateway
   win_condition:
     type: "command_output_matches"
     command: "ssh -i id_rsa -o StrictHostKeyChecking=no player@gateway 'test -f glitch.tar.gz && echo yes'"
@@ -535,8 +1089,18 @@
     <'.'> (From Remote Gateway) "I made it! I'm on the secure server!"
     <'.'> "Now, destroy the evidence on the old container before it gets wiped!"
     <'.'> "Delete the local copy of me! Remove that tar file!"
-  objective: "Run 'rm glitch.tar.gz'."
+  objective: "rm glitch.tar.gz"
   hard_objective: "Delete the local file 'glitch.tar.gz'."
+  hints:
+    - "The ReMove command deletes files. There's no trash can on the command line."
+  lesson: |
+    rm deletes files permanently. There is no trash and no undo.
+      rm file      delete a file              rm -i file   ask first
+      rm -r dir    delete a directory and everything in it
+      rm -f file   force: no prompts, no error if it's missing
+      rmdir dir    delete an EMPTY directory only (safer)
+    Be very careful with rm -rf and wildcards: 'rm * .bak' (note the space) deletes EVERYTHING here.
+    Tip: run 'ls' with the same pattern first to see what it would match.
   win_condition:
     type: "command_output_matches"
     command: "test ! -f /home/player/glitch.tar.gz && echo yes"
@@ -550,16 +1114,16 @@
   environment: "docker"
   intro_text: |
     [SYSTEM MESSAGE]: SIMULATION COMPLETE. USER CERTIFICATION: PASS.
-    
+
     <'.'> (Remote Transmission) "We did it, Admin. We hacked the system."
     <'.'> "I'm free. And you... you are ready."
     <'.'> "Ad Astra Per Aspera."
     <'.'> (Connection Closed)
-  objective: "Type 'exit' to finish the game."
+  objective: "exit"
   hard_objective: "Exit the shell to finish the game."
   win_condition:
     type: "user_output_contains"
-    expected_output: "impossible_string_never_match" 
+    expected_output: "impossible_string_never_match"
   success_text: |
     Goodbye.
   xp_reward: 500

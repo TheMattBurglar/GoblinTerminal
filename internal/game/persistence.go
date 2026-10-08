@@ -6,9 +6,30 @@ import (
 	"path/filepath"
 )
 
+// QuestStats records how the player got through a quest.
+type QuestStats struct {
+	Attempts  int  `json:"attempts"`   // commands run that didn't complete the quest
+	HintsUsed int  `json:"hints_used"` // highest hint level revealed
+	Completed bool `json:"completed"`
+}
+
 type GameState struct {
-	CurrentQuestID int      `json:"current_quest_id"`
-	MsgLog         []string `json:"msg_log"` // Optional: save history? For now just quest ID is key.
+	CurrentQuestID int                 `json:"current_quest_id"`
+	MsgLog         []string            `json:"msg_log"` // Optional: save history? For now just quest ID is key.
+	Stats          map[int]*QuestStats `json:"stats,omitempty"`
+}
+
+// QuestStats returns the stats for a quest ID, creating them if needed.
+func (s *GameState) QuestStats(id int) *QuestStats {
+	if s.Stats == nil {
+		s.Stats = map[int]*QuestStats{}
+	}
+	st, ok := s.Stats[id]
+	if !ok {
+		st = &QuestStats{}
+		s.Stats[id] = st
+	}
+	return st
 }
 
 func GetSavePath() (string, error) {

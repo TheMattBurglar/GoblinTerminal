@@ -3,6 +3,12 @@
 # for "standard" linux feeling for certification study.
 FROM ubuntu:24.04
 
+# The ubuntu image is "minimized": man pages and docs are stripped and 'man'
+# is replaced by a stub. Man pages are allowed on the real exam, so restore them.
+RUN apt-get update && apt-get install -y unminimize && \
+    yes | unminimize && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install standard tools required for Canonical exam
 # but NOT "too many" tools, so the user has to solve problems.
 RUN apt-get update && apt-get install -y \

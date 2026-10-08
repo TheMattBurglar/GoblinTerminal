@@ -143,8 +143,16 @@ func (m *Manager) StopContainer() error {
 	return nil
 }
 
-// ExecuteCommand runs a command inside the container and returns stdout/stderr
-func (m *Manager) ExecuteCommand(command string) (string, error) {
+// ErrTimeout is returned when a command is killed for running too long,
+// usually because it is interactive and waiting for input.
+var ErrTimeout = fmt.Errorf("command timed out")
+
+// commandTimeout is how long a player command may run before being killed.
+const commandTimeout = 5 * time.Second
+
+// ExecuteCommand runs a command inside the container and returns stdout and
+// stderr separately, so callers can validate stdout without stderr noise.
+func (m *Manager) ExecuteCommand(command string) (string, string, error) {
 	// Handle 'cd' specially
 	trimmedCmd := strings.TrimSpace(command)
 	if strings.HasPrefix(trimmedCmd, "cd ") || trimmedCmd == "cd" {
@@ -174,7 +182,7 @@ func (m *Manager) ExecuteCommand(command string) (string, error) {
 			if errStr == "" {
 				errStr = "No such file or directory" // default generic
 			}
-			return "", fmt.Errorf("%s", errStr)
+			return "", "", fmt.Errorf("%s", errStr)
 		}
 
 		// Update persistent state
@@ -182,22 +190,24 @@ func (m *Manager) ExecuteCommand(command string) (string, error) {
 		if newDir != "" {
 			m.CurrentDir = newDir
 		}
-		return "", nil // cd produces no output on success usually, or we could return empty
+		return "", "", nil // cd produces no output on success
 	}
 
 	// For normal commands, execute them in the current working directory
-	// We use the -w flag if possible, OR we chain cd.
 	// docker exec -w /current/path ...
 
 	args := []string{"exec", "-w", m.CurrentDir, m.ContainerName, "bash", "-c", command}
 	cmd := exec.Command(m.Runtime, args...)
 
 	// Create a timer to kill command if it hangs
-	time.AfterFunc(5*time.Second, func() {
+	timedOut := false
+	timer := time.AfterFunc(commandTimeout, func() {
 		if cmd.Process != nil {
+			timedOut = true
 			cmd.Process.Kill()
 		}
 	})
+	defer timer.Stop()
 
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -205,18 +215,11 @@ func (m *Manager) ExecuteCommand(command string) (string, error) {
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-
-	output := out.String()
-	errOut := stderr.String()
-
-	if err != nil {
-		if errOut != "" {
-			return "", fmt.Errorf("%s", errOut)
-		}
-		return "", err
+	if timedOut {
+		err = ErrTimeout
 	}
 
-	return output, nil
+	return out.String(), stderr.String(), err
 }
 
 // ExecuteValidation runs a command from the root directory to check win conditions
@@ -285,9 +288,12 @@ func (m *Manager) ResetStorage() error {
 // RestoreEnvironment ensures the container state matches the expected progress based on quest ID
 // This handles cases like re-creating the 'glitch' user if the container was recreated
 func (m *Manager) RestoreEnvironment(questID int) error {
+	// questID is the index of the current quest, so quest N has been
+	// completed when questID >= N.
+
 	// Quest 10: Create glitch user
 	// If we are past quest 10, glitch user must exist
-	if questID > 10 {
+	if questID >= 10 {
 		// Check if user exists using RunAsRoot (which returns error on failure)
 		// ExecuteValidation swallows errors so it returns nil error even if user is missing
 		err := m.RunAsRoot("id glitch")
@@ -306,7 +312,7 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 			// Checking Dockerfile would be good, but assuming we can exec as root.
 
 			// We'll use a helper to run as root
-			if err := m.RunAsRoot("useradd glitch"); err != nil {
+			if err := m.RunAsRoot("useradd -m glitch"); err != nil {
 				// if fails (maybe it thinks it exists?), ignore or log
 				// assuming clean state if id glitch failed.
 				return fmt.Errorf("failed to restore glitch user: %v", err)
@@ -314,8 +320,8 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 		}
 	}
 
-	// Quest 16: Add glitch to sudo
-	if questID > 16 {
+	// Quest 18: Add glitch to sudo
+	if questID >= 18 {
 		// Check if glitch is sudoer
 		out, _ := m.ExecuteValidation("groups glitch")
 		if !strings.Contains(out, "sudo") {
@@ -325,8 +331,13 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 		}
 	}
 
+	// Quest 19: Force glitch's password to expire
+	if questID >= 19 {
+		_ = m.RunAsRoot("chage -d 0 glitch")
+	}
+
 	// Ensure ownership of .safe_house if past Quest 11
-	if questID > 11 {
+	if questID >= 11 {
 		// Quest 11: "sudo chown glitch /home/player/.safe_house"
 		if _, err := m.ExecuteValidation("test -d /home/player/.safe_house"); err == nil {
 			_ = m.RunAsRoot("chown glitch /home/player/.safe_house")
@@ -334,7 +345,7 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 	}
 
 	// Ensure permissions of .safe_house if past Quest 12
-	if questID > 12 {
+	if questID >= 12 {
 		// Quest 12: "sudo chmod 700 /home/player/.safe_house"
 		if _, err := m.ExecuteValidation("test -d /home/player/.safe_house"); err == nil {
 			_ = m.RunAsRoot("chmod 700 /home/player/.safe_house")

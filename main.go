@@ -15,10 +15,9 @@ import (
 
 func main() {
 	// Flags
-	// Flags
 	questFlag := flag.Int("quest", 0, "Jump to specific quest ID (debug)")
 	resetFlag := flag.Bool("reset", false, "Reset save data")
-	hardFlag := flag.Bool("hard", false, "Enable Hard Mode (no command hints)")
+	hardFlag := flag.Bool("hard", false, "Enable Hard Mode (hints disabled)")
 	flag.Parse()
 
 	// 1. Initialize Container Manager
@@ -66,6 +65,8 @@ func main() {
 	state, err := game.LoadState()
 	if err == nil {
 		startQuestIdx = state.CurrentQuestID
+	} else {
+		state = game.GameState{}
 	}
 
 	// Flag overrides save
@@ -77,7 +78,7 @@ func main() {
 
 	// 3. Start TUI
 	// The construction of the Image and Container will happen inside the UI for better feedback
-	p := tea.NewProgram(ui.NewModel(quests, manager, startQuestIdx, *hardFlag), tea.WithAltScreen())
+	p := tea.NewProgram(ui.NewModel(quests, manager, state, startQuestIdx, *hardFlag), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,9 +17,29 @@ import (
 // Define custom messages
 type containerReadyMsg struct{ err error }
 type commandResultMsg struct {
-	output string
+	cmd    string
+	stdout string
+	stderr string
 	err    error
 }
+
+// nudgeAfter lists the failed-attempt counts at which Glitch suggests a hint.
+var nudgeAfter = map[int]bool{3: true, 6: true, 10: true}
+
+// interactiveCommands match programs that need a real TTY. This terminal runs
+// each command non-interactively, so they would hang until the timeout.
+var interactiveCommands = []*regexp.Regexp{
+	regexp.MustCompile(`^\s*(sudo\s+)?(nano|vi|vim|emacs|top|htop|visudo|vipw|vigr|sudoedit)(\s|$)`),
+	regexp.MustCompile(`^\s*(sudo\s+)?crontab\s+(-u\s+\S+\s+)?-e\b`),
+	regexp.MustCompile(`^\s*(sudo\s+)?passwd(\s+[a-z_][a-z0-9_-]*)?\s*$`),
+}
+
+var (
+	hintStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#00D7FF"))
+	tipStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
+	lessonHeading = lipgloss.NewStyle().Foreground(lipgloss.Color("#5FAFFF")).Bold(true)
+	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+)
 
 type Model struct {
 	// dependencies
@@ -25,11 +47,13 @@ type Model struct {
 	manager *docker.Manager
 
 	// Game state
+	state           game.GameState
 	currentQuestIdx int
+	hintLevel       int // hints revealed for the current quest
 	gameStarted     bool
 	ready           bool
 	output          []string // Output buffer for the virtual terminal
-	lastOutput      string   // Last command output for validation
+	lastOutput      string   // Last command stdout for validation
 	input           string   // Current input
 	history         []string // Command history
 	historyIdx      int      // Current position in history
@@ -38,10 +62,11 @@ type Model struct {
 	// View state
 	width, height int
 	viewportReady bool // To avoid rendering before size is known
-	hardMode      bool // Hard Mode: hide commands
+	hardMode      bool // Hard Mode: no hints
+	scrollOffset  int  // Lines scrolled up from the bottom of the output
 }
 
-func NewModel(quests []game.Quest, manager *docker.Manager, startQuestID int, hardMode bool) Model {
+func NewModel(quests []game.Quest, manager *docker.Manager, state game.GameState, startQuestID int, hardMode bool) Model {
 	initialText := "Initializing Goblin Terminal..."
 	if len(quests) > 0 {
 		initialText = "Loading content..."
@@ -58,6 +83,7 @@ func NewModel(quests []game.Quest, manager *docker.Manager, startQuestID int, ha
 	return Model{
 		quests:          quests,
 		manager:         manager,
+		state:           state,
 		output:          []string{initialText},
 		glitchText:      "<'.'> ...",
 		currentQuestIdx: startQuestID,
@@ -118,20 +144,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commandResultMsg:
 		// Display output
+		if msg.stdout != "" {
+			m.output = append(m.output, splitOutput(msg.stdout)...)
+		}
+		if msg.stderr != "" {
+			m.output = append(m.output, splitOutput(msg.stderr)...)
+		}
 		if msg.err != nil {
-			m.output = append(m.output, fmt.Sprintf("Error: %v", msg.err))
-		} else {
-			lines := strings.Split(msg.output, "\n")
-			// Filter out empty last line often caused by split
-			if len(lines) > 0 && lines[len(lines)-1] == "" {
-				lines = lines[:len(lines)-1]
+			m.lastOutput = ""
+			switch {
+			case errors.Is(msg.err, docker.ErrTimeout):
+				m.output = append(m.output, dimStyle.Render("[Timed out after 5s. This terminal can't answer interactive prompts.]"))
+			case msg.stderr == "":
+				m.output = append(m.output, dimStyle.Render(fmt.Sprintf("[%v]", msg.err)))
 			}
-			m.output = append(m.output, lines...)
-			m.lastOutput = msg.output
+		} else {
+			m.lastOutput = msg.stdout
 		}
 
 		// Check win condition
-		return m, m.checkWinCondition()
+		return m, m.checkWinCondition(msg.cmd)
 
 	case tea.KeyMsg:
 		if !m.ready {
@@ -152,8 +184,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Toggle Hard Mode
 			m.hardMode = !m.hardMode
 			return m, nil
+		case tea.KeyPgUp:
+			m.scrollOffset += m.scrollStep()
+			if m.scrollOffset > len(m.output) {
+				m.scrollOffset = len(m.output)
+			}
+			return m, nil
+		case tea.KeyPgDown:
+			m.scrollOffset -= m.scrollStep()
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
+			return m, nil
 		case tea.KeyEnter:
 			cmdText := strings.TrimSpace(m.input)
+			m.scrollOffset = 0
 
 			// Calculate display path for history
 			displayPath := m.manager.CurrentDir
@@ -172,14 +217,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if cmdText == "exit" {
 				m.output = append(m.output, "Shutting down simulation...")
+				// Stop the containers first: once Quit is delivered the
+				// program exits and later commands in the sequence never run.
 				return m, tea.Sequence(
-					tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
-						return tea.Quit()
-					}),
 					func() tea.Msg {
 						m.manager.StopContainer()
 						return nil
 					},
+					tea.Quit,
 				)
 			}
 
@@ -190,21 +235,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Execute command async
 			cmd := cmdText // capture for closure
 
-			if cmd == "help" {
-				m.output = append(m.output, "To quit the game, type 'exit'.")
+			switch cmd {
+			case "help":
+				m.output = append(m.output, helpText()...)
 				return m, nil
-			}
-
-			if cmd == "history" {
+			case "hint":
+				m.revealHint()
+				return m, nil
+			case "clear":
+				m.output = []string{}
+				return m, nil
+			case "history":
 				for i, h := range m.history {
 					m.output = append(m.output, fmt.Sprintf("%5d  %s", i+1, h))
 				}
 				return m, nil
 			}
 
+			if isInteractive(cmd) {
+				m.output = append(m.output, tipLines(fmt.Sprintf(
+					"This training terminal can't run full-screen or interactive programs.\n"+
+						"Use a non-interactive form instead (e.g. echo/tee/sed to edit files,\n"+
+						"'crontab -' to load a crontab, chpasswd to set passwords).\n"+
+						"On the real exam you WILL use editors like nano. Practice them in a real shell:\n"+
+						"  %s exec -it %s bash",
+					m.manager.Runtime, m.manager.ContainerName))...)
+				return m, nil
+			}
+
 			return m, func() tea.Msg {
-				out, err := m.manager.ExecuteCommand(cmd)
-				return commandResultMsg{output: out, err: err}
+				stdout, stderr, err := m.manager.ExecuteCommand(cmd)
+				return commandResultMsg{cmd: cmd, stdout: stdout, stderr: stderr, err: err}
 			}
 
 		case tea.KeyUp:
@@ -234,43 +295,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case questCheckMsg:
-		if msg.passed {
-			// Quest Complete Logic
-
-			// Advance quest
-			completedQuest := m.quests[msg.idx]
-			m.output = append(m.output, "")
-
-			// Quest complete notification remains in history
-			headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
-			m.output = append(m.output, headerStyle.Render(fmt.Sprintf(">>> QUEST COMPLETE! +%d XP <<<", completedQuest.XPReward)))
-
-			// Success text in history
-			successLines := strings.Split(completedQuest.SuccessText, "\n")
-			m.output = append(m.output, successLines...)
-			m.output = append(m.output, "")
-
-			nextIdx := msg.idx + 1
-
-			// Save Progress
-			_ = game.SaveState(game.GameState{CurrentQuestID: nextIdx})
-
-			if nextIdx < len(m.quests) {
-				q := m.quests[nextIdx]
-
-				// Show next quest info in Glitch box
-				m.glitchText = fmt.Sprintf("(Next: %s)\n%s", q.Title, q.IntroText)
-				m.currentQuestIdx = nextIdx
-				m.output = append(m.output, fmt.Sprintf("--- QUEST %d: %s ---", q.ID, q.Title))
-
-				// Run setup commands for the new quest
-				return m, m.performQuestSetup(q)
-
-			} else {
-				m.glitchText = "You did it! All systems normal. <^.^>"
-				m.currentQuestIdx = nextIdx
-			}
+		if msg.idx != m.currentQuestIdx || msg.idx >= len(m.quests) {
+			return m, nil
 		}
+		completedQuest := m.quests[msg.idx]
+		stats := m.state.QuestStats(completedQuest.ID)
+		m.output = append(m.output, mistakeFeedback(completedQuest, msg.cmd, msg.passed)...)
+
+		if !msg.passed {
+			stats.Attempts++
+			m.saveState()
+			if nudgeAfter[stats.Attempts] && !m.hardMode && m.hintLevel < completedQuest.TotalHints() {
+				m.output = append(m.output, hintStyle.Render("<'.'> Stuck? Type 'hint' and I'll give you a clue."))
+			}
+			return m, nil
+		}
+
+		// Quest Complete Logic
+		stats.Completed = true
+		m.output = append(m.output, "")
+
+		// Quest complete notification remains in history
+		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+		m.output = append(m.output, headerStyle.Render(fmt.Sprintf(">>> QUEST COMPLETE! +%d XP <<<", completedQuest.XPReward)))
+		m.output = append(m.output, dimStyle.Render(fmt.Sprintf("(%d failed attempts, %d/%d hints used)",
+			stats.Attempts, stats.HintsUsed, completedQuest.TotalHints())))
+
+		// Success text in history
+		successLines := strings.Split(strings.TrimRight(completedQuest.SuccessText, "\n"), "\n")
+		m.output = append(m.output, successLines...)
+		m.output = append(m.output, "")
+		m.output = append(m.output, lessonLines(completedQuest)...)
+
+		nextIdx := msg.idx + 1
+
+		// Save Progress
+		m.currentQuestIdx = nextIdx
+		m.saveState()
+
+		if nextIdx < len(m.quests) {
+			q := m.quests[nextIdx]
+
+			// Show next quest info in Glitch box
+			m.glitchText = fmt.Sprintf("(Next: %s)\n%s", q.Title, q.IntroText)
+			m.hintLevel = m.state.QuestStats(q.ID).HintsUsed
+			m.output = append(m.output, fmt.Sprintf("--- QUEST %d: %s ---", q.ID, q.Title))
+
+			// Run setup commands for the new quest
+			return m, m.performQuestSetup(q)
+
+		}
+		m.glitchText = "You did it! All systems normal. <^.^>"
 		return m, nil
 	}
 	return m, nil
@@ -283,10 +358,74 @@ func (m *Model) startQuest(idx int) tea.Cmd {
 	}
 	m.currentQuestIdx = idx
 	q := m.quests[idx]
+	m.hintLevel = m.state.QuestStats(q.ID).HintsUsed
 	m.glitchText = q.IntroText
 	m.output = append(m.output, fmt.Sprintf("--- QUEST %d: %s ---", q.ID, q.Title))
 
 	return m.performQuestSetup(q)
+}
+
+// revealHint shows the next hint for the current quest. The final hint is
+// the full command.
+func (m *Model) revealHint() {
+	if m.currentQuestIdx >= len(m.quests) {
+		m.output = append(m.output, "No quest in progress.")
+		return
+	}
+	if m.hardMode {
+		m.output = append(m.output, hintStyle.Render("Hints are disabled in Hard Mode. Press Ctrl+H to toggle it off."))
+		return
+	}
+
+	q := m.quests[m.currentQuestIdx]
+	total := q.TotalHints()
+	if m.hintLevel < total {
+		m.hintLevel++
+		stats := m.state.QuestStats(q.ID)
+		if m.hintLevel > stats.HintsUsed {
+			stats.HintsUsed = m.hintLevel
+			m.saveState()
+		}
+	}
+
+	var text string
+	if m.hintLevel <= len(q.Hints) {
+		text = q.Hints[m.hintLevel-1]
+	} else {
+		text = "Full command: " + q.Objective
+	}
+	prefix := fmt.Sprintf("[HINT %d/%d] ", m.hintLevel, total)
+	for i, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		if i > 0 {
+			prefix = strings.Repeat(" ", len(prefix))
+		}
+		m.output = append(m.output, hintStyle.Render(prefix+line))
+	}
+}
+
+// mistakeFeedback returns explanations for any known mistakes the command
+// matches. If the quest was passed, only mistakes marked Always are shown.
+func mistakeFeedback(q game.Quest, cmd string, passed bool) []string {
+	var lines []string
+	for _, mistake := range q.Mistakes {
+		if (!passed || mistake.Always) && mistake.Matches(cmd) {
+			lines = append(lines, tipLines(mistake.Message)...)
+		}
+	}
+	return lines
+}
+
+func (m Model) saveState() {
+	m.state.CurrentQuestID = m.currentQuestIdx
+	_ = game.SaveState(m.state)
+}
+
+func (m Model) scrollStep() int {
+	step := m.height / 2
+	if step < 1 {
+		step = 1
+	}
+	return step
 }
 
 func (m Model) performQuestSetup(q game.Quest) tea.Cmd {
@@ -303,101 +442,146 @@ func (m Model) performQuestSetup(q game.Quest) tea.Cmd {
 	}
 }
 
-func (m *Model) checkWinCondition() tea.Cmd {
+func (m *Model) checkWinCondition(userCmd string) tea.Cmd {
 	if m.currentQuestIdx >= len(m.quests) {
 		return nil
 	}
 
 	q := m.quests[m.currentQuestIdx]
+	idx := m.currentQuestIdx
+	lastOutput := m.lastOutput
+	currentDir := m.manager.CurrentDir
 
 	return func() tea.Msg {
-		// Validating state often requires running another command
-		// This makes the flow complex because we can't easily return a Msg from here directly if we need to run an exec.
-		// However, for simplicity, we will run the validation command blocks synchronously here
-		// OR we dispatch a special validation msg.
-
-		// BLOCKING CALL for validation (simple for prototype)
+		wc := q.WinCondition
 		checkPassed := false
 
-		switch q.WinCondition.Type {
+		switch wc.Type {
 		case game.CommandOut:
 			// "CommandOut" runs a command to validate game state.
 			// e.g. "stat -c %a hut" should return "700"
 			// We MUST use ExecuteValidation so it runs in a predictable context (/home/player)
 			// independently of where the user has cd'd to.
-			out, _ := m.manager.ExecuteValidation(q.WinCondition.Command)
-			if strings.TrimSpace(out) == q.WinCondition.Expected {
-				checkPassed = true
-			}
+			out, _ := m.manager.ExecuteValidation(wc.Command)
+			checkPassed = strings.TrimSpace(out) == wc.Expected
 		case game.DirExists:
 			// check if dir exists using test -d, from ROOT context
-			cmd := fmt.Sprintf("test -d %s && echo yes", q.WinCondition.Target)
+			cmd := fmt.Sprintf("test -d %s && echo yes", wc.Target)
 			out, _ := m.manager.ExecuteValidation(cmd)
-			if strings.TrimSpace(out) == "yes" {
-				checkPassed = true
-			}
+			checkPassed = strings.TrimSpace(out) == "yes"
 		case game.FileExists:
-			cmd := fmt.Sprintf("test -f %s && echo yes", q.WinCondition.Target)
+			cmd := fmt.Sprintf("test -f %s && echo yes", wc.Target)
 			out, _ := m.manager.ExecuteValidation(cmd)
-			if strings.TrimSpace(out) == "yes" {
-				checkPassed = true
-			}
+			checkPassed = strings.TrimSpace(out) == "yes"
 		case game.FileContains:
 			// check if file content contains string
-			// We use grep in the container to check
-			// safe because it's a validation command running in a controlled container
-			// Escape single quotes for safety if needed, though basic check here:
-			cmd := fmt.Sprintf("grep -q \"%s\" %s && echo yes", q.WinCondition.Content, q.WinCondition.Target)
+			cmd := fmt.Sprintf("grep -q \"%s\" %s && echo yes", wc.Content, wc.Target)
 			out, _ := m.manager.ExecuteValidation(cmd)
-			if strings.TrimSpace(out) == "yes" {
-				checkPassed = true
-			}
+			checkPassed = strings.TrimSpace(out) == "yes"
 		case game.UserOutputMatch:
 			// Check if the *last* command output by the user matches the expectation
-			// This is useful for "cat file" or "grep" where we want to see if they saw the right thing
-			if strings.TrimSpace(m.lastOutput) == strings.TrimSpace(q.WinCondition.Expected) {
-				checkPassed = true
-			}
+			checkPassed = strings.TrimSpace(lastOutput) == strings.TrimSpace(wc.Expected)
 		case game.UserOutputContains:
-			// Check if the *last* command output contains the expected string
-			if strings.Contains(m.lastOutput, q.WinCondition.Expected) {
-				checkPassed = true
+			checkPassed = strings.Contains(lastOutput, wc.Expected) && !rejected(lastOutput, wc.RejectOutput)
+		case game.UserOutputRegex:
+			re, err := regexp.Compile(wc.Pattern)
+			checkPassed = err == nil && re.MatchString(lastOutput) && !rejected(lastOutput, wc.RejectOutput)
+		case game.UserOutputHasResult:
+			// Every line printed by the validation command must appear as a
+			// whole word in the user's output.
+			out, _ := m.manager.ExecuteValidation(wc.Command)
+			fields := strings.Fields(out)
+			checkPassed = len(fields) > 0 && !rejected(lastOutput, wc.RejectOutput)
+			for _, f := range fields {
+				re := regexp.MustCompile(`\b` + regexp.QuoteMeta(f) + `\b`)
+				if !re.MatchString(lastOutput) {
+					checkPassed = false
+				}
 			}
 		case game.CurrentDirMatch:
-			// Check if the current directory matches the target
-			// The manager tracks CurrentDir
-			// We need to handle relative vs absolute paths potentially?
-			// For simplicity early game, target likely "hut" which implies "/home/player/hut"
-			// But let's support both explicit absolute or relative to home.
-
-			targetDir := q.WinCondition.Target
-			// Normalize target
+			// Support both absolute targets and targets relative to home.
+			targetDir := wc.Target
 			if !strings.HasPrefix(targetDir, "/") {
 				targetDir = "/home/player/" + targetDir
 			}
 			targetDir = strings.TrimSuffix(targetDir, "/")
-
-			currentDir := strings.TrimSuffix(m.manager.CurrentDir, "/")
-
-			if currentDir == targetDir {
-				checkPassed = true
-			}
+			checkPassed = strings.TrimSuffix(currentDir, "/") == targetDir
 		}
 
-		return questCheckMsg{idx: m.currentQuestIdx, passed: checkPassed}
+		return questCheckMsg{idx: idx, passed: checkPassed, cmd: userCmd}
 	}
 }
 
 type questCheckMsg struct {
 	idx    int
 	passed bool
+	cmd    string // the player command that triggered the check
 }
 
-// Need to handle the new msg type
-// I need to update the Update function to handle questCompleteMsg
-// Since I can't edit previous blocks, I will return the updated model content in full.
-// Wait, I am writing the whole file. I need to insert the handler for questCompleteMsg in the Update function.
-// I will rewrite the Update function below properly.
+func rejected(output string, reject []string) bool {
+	for _, r := range reject {
+		if strings.Contains(output, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func isInteractive(cmd string) bool {
+	for _, re := range interactiveCommands {
+		if re.MatchString(cmd) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitOutput(s string) []string {
+	lines := strings.Split(s, "\n")
+	// Filter out empty last line often caused by split
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func tipLines(msg string) []string {
+	var lines []string
+	for i, line := range strings.Split(strings.TrimRight(msg, "\n"), "\n") {
+		prefix := "[TIP] "
+		if i > 0 {
+			prefix = "      "
+		}
+		lines = append(lines, tipStyle.Render(prefix+line))
+	}
+	return lines
+}
+
+func lessonLines(q game.Quest) []string {
+	if strings.TrimSpace(q.Lesson) == "" {
+		return nil
+	}
+	lines := []string{lessonHeading.Render("=== WHAT YOU LEARNED ===")}
+	lines = append(lines, strings.Split(strings.TrimRight(q.Lesson, "\n"), "\n")...)
+	lines = append(lines, lessonHeading.Render("========================"), "")
+	return lines
+}
+
+func helpText() []string {
+	return []string{
+		"Game commands:",
+		"  hint      Reveal the next clue for the current quest (the last clue is the full command)",
+		"  history   Show commands you've run",
+		"  clear     Clear the screen",
+		"  exit      Quit the game (progress is saved)",
+		"Keys: Up/Down = command history, PgUp/PgDn = scroll output, Ctrl+H = toggle Hard Mode (no hints)",
+		"Finding answers yourself (allowed on the real exam!):",
+		"  man <command>              Read a command's manual",
+		"  man <command> | grep word  Search a manual, e.g.  man chage | grep -A1 expire",
+		"  man -k <keyword>           Find commands related to a keyword",
+		"  <command> --help           Quick usage summary",
+	}
+}
 
 func (m Model) View() string {
 	if !m.viewportReady {
@@ -418,15 +602,18 @@ func (m Model) View() string {
 
 	if m.currentQuestIdx < len(m.quests) {
 		q := m.quests[m.currentQuestIdx]
-		if m.hardMode {
+		task := q.HardObjective
+		if task == "" {
+			task = q.Objective
+		}
+		switch {
+		case m.hardMode:
 			headerColor = "#FF5555" // Red for Hard Mode
-			if q.HardObjective != "" {
-				objectiveText = fmt.Sprintf("[HARD MODE] %s", q.HardObjective)
-			} else {
-				objectiveText = fmt.Sprintf("[HARD MODE] %s", q.Objective)
-			}
-		} else {
+			objectiveText = fmt.Sprintf("[HARD MODE] %s", task)
+		case m.hintLevel >= q.TotalHints():
 			objectiveText = q.Objective
+		default:
+			objectiveText = fmt.Sprintf("%s  (type 'hint' if stuck)", task)
 		}
 	} else {
 		objectiveText = "All Objectives Complete!"
@@ -470,7 +657,10 @@ func (m Model) View() string {
 
 	// Exit hint only for first quest
 	if m.input == "" && m.currentQuestIdx == 0 {
-		inputLine += lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")).Render(" (type 'exit' to quit)")
+		inputLine += dimStyle.Render(" (type 'help' for game commands, 'exit' to quit)")
+	}
+	if m.scrollOffset > 0 {
+		inputLine += dimStyle.Render(" [scrolled up, PgDn to return]")
 	}
 	// Add blinking cursor
 	if time.Now().UnixMilli()/500%2 == 0 {
@@ -481,8 +671,6 @@ func (m Model) View() string {
 	// Header: 1
 	// GlitchBox: lipgloss.Height(glitchBox)
 	// Input: 1
-	// Total Fixed = 1 + h(glitchBox) + 1
-
 	totalFixedHeight := 1 + lipgloss.Height(glitchBox) + 1
 
 	termHeight := m.height - totalFixedHeight
@@ -499,12 +687,11 @@ func (m Model) View() string {
 
 	wrapStyle := lipgloss.NewStyle().Width(contentWidth)
 	var visibleLines []string
+	wanted := termHeight + m.scrollOffset
 
 	// Iterate backwards through history to collect the most recent lines
 	// accounting for line wrapping
 	for i := len(m.output) - 1; i >= 0; i-- {
-		// Style the line BEFORE wrapping to preserve ansi codes naturally?
-		// No, styleLine adds ansi codes. wrapStyle handles them.
 		lineContent := styleLine(m.output[i])
 
 		// Render with wrapping
@@ -515,12 +702,19 @@ func (m Model) View() string {
 		visibleLines = append(lines, visibleLines...)
 
 		// Stop if we have enough lines to fill the screen
-		if len(visibleLines) >= termHeight {
+		if len(visibleLines) >= wanted {
 			break
 		}
 	}
 
-	// Truncate to exact height if we collected too many
+	// Drop lines below the scroll position, then truncate to exact height
+	offset := m.scrollOffset
+	if maxOffset := len(visibleLines) - termHeight; offset > maxOffset {
+		offset = maxOffset
+	}
+	if offset > 0 {
+		visibleLines = visibleLines[:len(visibleLines)-offset]
+	}
 	if len(visibleLines) > termHeight {
 		visibleLines = visibleLines[len(visibleLines)-termHeight:]
 	}
@@ -543,8 +737,10 @@ func (m Model) View() string {
 }
 
 func styleLine(text string) string {
-	// If the line already has ansi codes (e.g. from SuccessText), we might want to skip or be careful.
-	// Simple check: if it starts with [SYSTEM MESSAGE], color it Orange.
+	// Lines that were already styled (hints, tips, lessons) are left alone.
+	if strings.Contains(text, "\x1b[") {
+		return text
+	}
 	if strings.Contains(text, "[SYSTEM MESSAGE]") {
 		// Orange/Yellow
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA500")).Render(text)

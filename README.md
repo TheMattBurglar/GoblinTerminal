@@ -19,9 +19,12 @@ I built this project to serve as a fun, interactive challenge *inspired by* the 
     *   Processes (ps/kill) & Logs (syslog)
     *   Archives (tar) & Regex (grep)
     *   *Note: Some topics like disk partitioning are adapted for the container environment.*
-*   **Quality of Life**: Built-in command history (Up/Down arrows) and strict win-condition validation.
-*   **Immediate Feedback**: The game validates your actions in real-time (e.g., checking if a file was actually created or permissions changed).
-*   **Hard Mode**: A separate mode that challenges you to complete the same quests without being specifically told the commands to use.  I recommend using this mode to practice your familiarity with the commands.
+*   **Learn, Don't Copy**: Each quest tells you *what* to do, not which command to type. Type `hint` for progressively more specific clues; the last one reveals the full command.
+*   **Lessons**: After each quest, a "What You Learned" card explains the command, its common options, and related exam knowledge.
+*   **Mistake Feedback**: Common wrong approaches (e.g. `usermod -G` without `-a`, an unquoted cron line) get an explanation of what went wrong.
+*   **Man Pages**: The container has full man pages (allowed on the real exam), so you can practice looking things up: `man useradd | grep -i -A1 'create.*home'`.
+*   **Quality of Life**: Command history (Up/Down), scrollback (PgUp/PgDn), `help`, `clear`, and per-quest stats (attempts and hints used) saved with your progress.
+*   **Hard Mode**: Hints are disabled. Run with `--hard` or toggle with Ctrl+H. I recommend replaying in this mode to test your recall.
 
 ## Prerequisites
 
@@ -46,6 +49,21 @@ I built this project to serve as a fun, interactive challenge *inspired by* the 
     ./goblin-terminal
     ```
     *Note: The first run will build the necessary container image, which may take a minute.*
+
+## Running the Tests
+
+```bash
+go test ./...
+```
+
+A full end-to-end walkthrough that plays every quest against real containers is opt-in:
+
+```bash
+docker build -t goblin-terminal:latest .
+GOBLIN_INTEGRATION=1 go test ./internal/ui -run Walkthrough -v
+```
+
+It uses a temporary home and config directory, so it won't touch your saved game.
 
 ## License
 
