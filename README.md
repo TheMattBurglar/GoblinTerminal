@@ -14,11 +14,14 @@ I built this project to serve as a fun, interactive challenge *inspired by* the 
 *   **Real Environment**: Commands are executed in a real Linux container (Docker/Podman). No simulation quirks—just real Linux.
 *   **Twin-Container Architecture**: In Act 3, the game spins up a second "Gateway" container, allowing you to practice real SSH, SCP, and network connectivity quests between isolated systems.
 *   **Exam-Inspired Challenges**: The quests are designed around the objectives of the **Canonical Using Linux Terminal** exam, covering skills such as:
-    *   File & Directory Management
-    *   Permissions (chmod/chown) & Users (useradd/sudo)
-    *   Processes (ps/kill) & Logs (syslog)
-    *   Archives (tar) & Regex (grep)
+    *   File & Directory Management, find, redirection (`>`, `>>`, `2>/dev/null`) and sed
+    *   Permissions (numeric and symbolic chmod, setuid/setgid/sticky, umask) & ownership
+    *   Users, groups, sudo and password policy (useradd/usermod, chage, sudoers, pwquality, login.defs)
+    *   Processes (ps/kill), logs (syslog, auth.log) and logrotate
+    *   Disks: dd, partitioning (parted/fdisk), mkfs and fsck on disk images
+    *   Archives (tar), regex (grep), cron, and SSH (keys, scp, sshd_config hardening)
     *   *Note: Some topics like disk partitioning are adapted for the container environment.*
+*   **Question Quests**: Some quests ask you to *read and interpret* something (an `ls -l` string, `/etc/shadow`, a sudoers rule, a crontab, a log) and reply with `answer <value>`, like the exam's "identify" objectives.
 *   **Learn, Don't Copy**: Each quest tells you *what* to do, not which command to type. Type `hint` for progressively more specific clues; the last one reveals the full command.
 *   **Lessons**: After each quest, a "What You Learned" card explains the command, its common options, and related exam knowledge.
 *   **Mistake Feedback**: Common wrong approaches (e.g. `usermod -G` without `-a`, an unquoted cron line) get an explanation of what went wrong.

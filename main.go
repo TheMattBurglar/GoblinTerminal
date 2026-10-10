@@ -15,7 +15,7 @@ import (
 
 func main() {
 	// Flags
-	questFlag := flag.Int("quest", 0, "Jump to specific quest ID (debug)")
+	questFlag := flag.Int("quest", 0, "Jump to quest number N (debug)")
 	resetFlag := flag.Bool("reset", false, "Reset save data")
 	hardFlag := flag.Bool("hard", false, "Enable Hard Mode (hints disabled)")
 	flag.Parse()
@@ -64,15 +64,14 @@ func main() {
 	// properties of LoadState
 	state, err := game.LoadState()
 	if err == nil {
-		startQuestIdx = state.CurrentQuestID
+		startQuestIdx = state.QuestIndex(quests)
 	} else {
 		state = game.GameState{}
 	}
 
 	// Flag overrides save
 	if *questFlag > 0 {
-		// Assuming 1-based IDs map to 0-based index
-		// For robustness, usually we'd search ID, but math is safe for this prototype
+		// Quest numbers are 1-based positions, as shown in the game
 		startQuestIdx = *questFlag - 1
 	}
 

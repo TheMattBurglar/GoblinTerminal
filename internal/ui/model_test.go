@@ -8,6 +8,8 @@ import (
 
 	"goblin-terminal/internal/game"
 	"goblin-terminal/pkg/docker"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func loadQuests(t *testing.T) []game.Quest {
@@ -19,11 +21,24 @@ func loadQuests(t *testing.T) []game.Quest {
 	return quests
 }
 
+// questIndex returns the position of the quest with this ID.
+func questIndex(t *testing.T, quests []game.Quest, id int) int {
+	t.Helper()
+	for i, q := range quests {
+		if q.ID == id {
+			return i
+		}
+	}
+	t.Fatalf("no quest %d", id)
+	return -1
+}
+
 func TestRevealHint(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // don't touch the real save file
 	quests := loadQuests(t)
-	m := NewModel(quests, nil, game.GameState{}, 9, false) // quest 10: useradd
-	q := quests[9]
+	idx := questIndex(t, quests, 10) // useradd
+	m := NewModel(quests, nil, game.GameState{}, idx, false)
+	q := quests[idx]
 
 	for i := 1; i <= q.TotalHints(); i++ {
 		m.revealHint()
@@ -56,16 +71,64 @@ func TestRevealHintHardMode(t *testing.T) {
 
 func TestMistakeFeedbackAlways(t *testing.T) {
 	quests := loadQuests(t)
-	q := quests[17] // quest 18: usermod -aG
+	q := quests[questIndex(t, quests, 18)] // usermod -aG
 	if lines := mistakeFeedback(q, "sudo usermod -G sudo glitch", true); len(lines) == 0 {
 		t.Error("'always' mistakes should show even when the quest passed")
 	}
-	q = quests[2] // quest 3: cd /tmp
+	q = quests[questIndex(t, quests, 3)] // cd /tmp
 	if lines := mistakeFeedback(q, "cd tmp", true); len(lines) != 0 {
 		t.Error("regular mistakes should not show when the quest passed")
 	}
 	if lines := mistakeFeedback(q, "cd tmp", false); len(lines) == 0 {
 		t.Error("regular mistakes should show when the quest failed")
+	}
+
+	q = quests[questIndex(t, quests, 10)] // useradd
+	if lines := mistakeFeedback(q, "sudo useradd -m Glitch", false); len(lines) == 0 {
+		t.Error("a capitalized user name should get the case-sensitivity tip")
+	}
+	if lines := mistakeFeedback(q, "sudo useradd -m glitch", false); len(lines) != 0 {
+		t.Errorf("lower-case glitch should not get a tip, got %q", lines)
+	}
+}
+
+func TestSubmitAnswer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	quests := loadQuests(t)
+
+	// 'answer' on a command quest is refused without counting an attempt.
+	m := NewModel(quests, nil, game.GameState{}, 0, false)
+	if cmd := m.submitAnswer("answer /home/player"); cmd != nil {
+		t.Error("answer should not be checked on a command quest")
+	}
+
+	idx := questIndex(t, quests, 31)
+	m = NewModel(quests, nil, game.GameState{}, idx, false)
+	if cmd := m.submitAnswer("answer"); cmd != nil {
+		t.Error("an empty answer should not be checked")
+	}
+
+	submit := func(cmd string) questCheckMsg {
+		t.Helper()
+		result := m.submitAnswer(cmd)().(questCheckMsg)
+		model, _ := m.Update(result)
+		m = model.(Model)
+		return result
+	}
+	if submit("answer 457").passed {
+		t.Fatal("wrong answer passed")
+	}
+	if got := m.state.QuestStats(31).Attempts; got != 1 {
+		t.Errorf("wrong answer should count as an attempt, got %d", got)
+	}
+	if !submit("answer 754").passed {
+		t.Fatal("right answer failed")
+	}
+	if m.currentQuestIdx != idx+1 {
+		t.Errorf("should advance to the next quest, at %d", m.currentQuestIdx)
+	}
+	if saved, err := game.LoadState(); err != nil || saved.CurrentQuest != quests[idx+1].ID {
+		t.Errorf("save should record the next quest's ID, got %+v (%v)", saved, err)
 	}
 }
 
@@ -125,9 +188,20 @@ func TestWalkthrough(t *testing.T) {
 	// reports whether it completed the current quest.
 	run := func(cmd string) bool {
 		t.Helper()
-		stdout, stderr, err := mgr.ExecuteCommand(cmd)
-		model, check := m.Update(commandResultMsg{cmd: cmd, stdout: stdout, stderr: stderr, err: err})
-		m = model.(Model)
+		var check tea.Cmd
+		var stdout, stderr string
+		var err error
+		if strings.HasPrefix(cmd, "answer ") {
+			check = m.submitAnswer(cmd) // handled by the game, not the shell
+		} else {
+			stdout, stderr, err = mgr.ExecuteCommand(cmd)
+			var model tea.Model
+			model, check = m.Update(commandResultMsg{cmd: cmd, stdout: stdout, stderr: stderr, err: err})
+			m = model.(Model)
+		}
+		if check == nil {
+			return false // investigating during a question quest
+		}
 		result := check().(questCheckMsg)
 		model, setup := m.Update(result)
 		m = model.(Model)
@@ -163,17 +237,42 @@ func TestWalkthrough(t *testing.T) {
 		{15, nil, nil, "sudo tail /var/log/syslog"},
 		{16, []string{"grep CURE /usr/share/doc/data_dump.txt", "cat /usr/share/doc/data_dump.txt"}, nil,
 			"grep -n -E 'CURE-[0-9]{4}' /usr/share/doc/data_dump.txt"},
+		{31, []string{"answer 457"}, []string{"ls -l /opt/eye"}, "answer 754"},
+		{38, nil, nil, "sudo chmod a-x /opt/eye/report.sh"},
+		{39, []string{"chmod +t /srv/dropbox"}, nil, "sudo chmod +t /srv/dropbox"},
+		{40, []string{"answer 750"}, []string{"umask 027; touch umask_test; stat -c %a umask_test"}, "answer 640"},
+		{32, []string{"answer 10.10.10.3"}, []string{"sudo grep 'Failed password' /var/log/auth.log"}, "answer 203.0.113.66"},
+		{41, []string{"grep 'Failed password' /var/log/auth.log > evidence.txt"}, nil, "sudo grep 'Failed password' /var/log/auth.log > evidence.txt"},
+		{42, []string{"date > evidence.txt"}, []string{"sudo grep 'Failed password' /var/log/auth.log > evidence.txt"}, "date >> evidence.txt"},
+		{43, []string{"find / -name beacon 2>/dev/null"}, nil, "find / -name beacon.key 2>/dev/null"},
 		{17, []string{"id"}, nil, "id glitch"},
+		{33, nil, []string{"grep glitch /etc/passwd"}, "answer /bin/sh"},
 		{18, nil, nil, "sudo gpasswd -a glitch sudo"},
+		{34, nil, []string{"getent group sudo"}, "answer glitch, player, ubuntu"},
+		{35, []string{"answer hunter"}, []string{"sudo cat /etc/sudoers.d/eye_wardens"}, "answer eye"},
+		{44, []string{"find / -perm 4000 2>/dev/null", "find / -name eye_backdoor 2>/dev/null"}, nil, "find / -perm -4000 -type f 2>/dev/null"},
+		{45, []string{"chmod u-s /usr/local/bin/eye_backdoor"}, nil, "sudo chmod u-s /usr/local/bin/eye_backdoor"},
 		{19, nil, nil, "sudo chage -d 0 glitch"},
+		{36, nil, []string{"sudo grep glitch /etc/shadow"}, "answer !"},
+		{46, []string{"sed 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf"}, nil, "sudo sed -i 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf"},
+		{47, nil, nil, "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\t90/' /etc/login.defs"},
 		{20, []string{"dd if=/dev/zero of=backpack.img bs=1M count=1"}, nil, "dd if=/dev/zero of=backpack.img bs=1M count=100"},
 		{21, nil, nil, "mkfs.ext4 backpack.img"},
+		{48, []string{"e2fsck backpack.img", "e2fsck -n backpack.img"}, nil, "e2fsck -fn backpack.img"},
+		{49, []string{"parted -s map.img mklabel msdos mkpart primary ext4 1MiB 100%"}, nil, "parted -s map.img mklabel gpt mkpart map ext4 1MiB 100%"},
+		{50, []string{"answer 2047"}, []string{"fdisk -l map.img"}, "answer 2048"},
 		{22, nil, nil, "echo '*/1 * * * * /usr/bin/date >> /home/player/heartbeat.log' | crontab -"},
-		{23, []string{"sudo tar -cf glitch.tar.gz .safe_house backpack.img"}, nil, "sudo tar -czf glitch.tar.gz .safe_house backpack.img"},
+		{37, nil, []string{"cat /etc/cron.d/eye_maintenance"}, "answer Sunday"},
+		{51, []string{"answer weekly"}, []string{"cat /etc/logrotate.d/eye"}, "answer 4"},
+		{52, []string{"sudo logrotate -d /etc/logrotate.d/eye"}, nil, "sudo logrotate -f /etc/logrotate.d/eye"},
+		{23, []string{"sudo tar -cf glitch.tar.gz .safe_house backpack.img map.img", "sudo tar -czf glitch.tar.gz .safe_house backpack.img"}, nil,
+			"sudo tar -czf glitch.tar.gz .safe_house backpack.img map.img"},
 		{24, nil, nil, `ssh-keygen -t rsa -f id_rsa -N ""`},
 		{25, nil, nil, "ping -c 3 gateway"},
 		{26, nil, nil, "ssh-copy-id -i id_rsa.pub player@gateway"},
 		{27, []string{"hostname"}, nil, "ssh -i id_rsa player@gateway hostname"},
+		{53, []string{"echo 'PasswordAuthentication no' | sudo tee -a /etc/ssh/sshd_config"}, []string{"sudo sed -i '$d' /etc/ssh/sshd_config"},
+			"sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config"},
 		{28, nil, nil, "scp -i id_rsa glitch.tar.gz player@gateway:"},
 		{29, nil, nil, "rm glitch.tar.gz"},
 	}

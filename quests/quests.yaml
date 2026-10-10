@@ -398,8 +398,8 @@
     [SYSTEM MESSAGE]: INITIATING DEEP CONTENT SCAN OF USER 'glitch'.
     [SYSTEM MESSAGE]: INSPECTING DIRECTORY CONTENTS...
 
-    <'.'> "They're trying to look inside! My cookie backups!"
-    <'.'> "Lock the door! Permissions! 7-0-0!"
+    <'.'> "They're trying to look inside the safe house! My cookie backups!"
+    <'.'> "Lock the door of ~/.safe_house! Permissions! 7-0-0!"
     <'.'> "Only the owner should see!"
   objective: "sudo chmod 700 /home/player/.safe_house"
   hard_objective: "Set permissions on '.safe_house' so only the owner has read/write/execute access."
@@ -420,6 +420,10 @@
       chmod a+x script.sh    add execute for everyone (a = u+g+o)
     On a DIRECTORY: r = list names, w = create/delete entries, x = enter it and reach files inside.
   mistakes:
+    - pattern: 'chmod\s+(-\w+\s+)*\S+\s+(/home/glitch|~glitch)/?\s*$'
+      message: |
+        That's glitch's HOME directory. The cookies are in the safe house: the hidden .safe_house
+        directory in YOUR home (/home/player/.safe_house), which glitch now owns.
     - pattern: 'chmod\s+(-\w+\s+)*777'
       message: "777 gives EVERYONE full access, the opposite of private! Only the owner should have rwx."
     - pattern: '^\s*chmod\b'
@@ -586,7 +590,7 @@
     Quote your pattern ("...") so the shell doesn't interpret characters like * or {}.
     'grep CURE' would also have matched "PROCURE". Precise patterns avoid false positives.
   mistakes:
-    - pattern: 'grep\s+(-[a-zA-Z]+\s+)*["'']?CURE-?["'']?\s'
+    - pattern: 'grep\s+(-[a-zA-Z]+\s+)*["'']?CURE-?["'']?(\s|$)'
       message: |
         A plain 'CURE' search also matches 'PROCURE'. Make the pattern specific:
         CURE- followed by exactly four digits.
@@ -594,8 +598,10 @@
       message: |
         In plain grep (basic regex), {4} is matched as literal text. Use grep -E for extended
         regex, or escape the braces: \{4\}
-    - pattern: '^\s*(cat|less|more)\s'
+    - pattern: '^\s*(cat|less|more)\s+\S+\s*$'
       message: "That dumps all 1000+ lines. Let grep do the searching so only the matching line is printed."
+    - pattern: '^\s*cat\s+\S+\s*\|\s*grep\b'
+      message: "(Side note: grep can read the file itself, so 'cat file | grep ...' can be just 'grep ... file'.)"
   win_condition:
     type: "user_output_contains"
     expected_output: "CURE-7355"
@@ -610,14 +616,354 @@
     <'.'> "That's it! 7355! Applying patch... *beep*... I feel better!"
   xp_reward: 35
 
+- id: 31
+  title: "Reading the Bits"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: HUNTER UNIT LOST. DEPLOYING SURVEILLANCE SCRIPT: /opt/eye/report.sh
+
+    <'.'> "The Eye lost its Hunter, so now it's sending a spy instead!"
+    <'.'> "Before we do anything, we need to know who can use that script."
+    <'.'> "Look at its permissions with ls -l and tell me the number. The octal one, like our 700!"
+    <'.'> "When you know it, tell me with: answer <number>"
+  objective: "answer 754"
+  hard_objective: "QUESTION: What is the octal (numeric) mode of /opt/eye/report.sh? Reply with: answer <mode>"
+  hints:
+    - "ls -l /opt/eye shows a 10-character string like -rw-r--r--. Skip the first character (the file type). The other 9 are three groups of three: owner, group, others."
+    - "Score each group of three: r=4, w=2, x=1, and '-' = 0. rwx = 7. Now work out the other two groups."
+  lesson: |
+    ls -l shows permissions as 10 characters, e.g. -rwxr-xr--
+      -     file type: - regular file, d directory, l symlink, c/b character/block device
+      rwx   owner (user): 4+2+1 = 7
+      r-x   group:        4+0+1 = 5
+      r--   others:       4+0+0 = 4      -> 754
+    So root (the owner) can do anything, the group can read and run it, and everyone else can only read it.
+    Special bits show up in the x slots:
+      s in the owner slot = setuid (4000)   the program runs as its OWNER, e.g. /usr/bin/passwd
+      s in the group slot = setgid (2000)   on a directory: new files inherit the directory's group
+      t in the others slot = sticky (1000)  in a directory, only a file's owner can delete it (/tmp is drwxrwxrwt = 1777)
+      A capital S or T means the bit is set but x is NOT.
+    Shortcut: stat -c '%a %A %U:%G' file    prints e.g.  754 -rwxr-xr-- root:root
+  mistakes:
+    - pattern: '^answer\s+0?457\b'
+      message: "Backwards! The order is owner, group, others, read left to right."
+    - pattern: '^answer\s+-?[rwx-]{9}\s*$'
+      message: "I need the NUMBER. Turn each group of three letters into a digit: r=4, w=2, x=1."
+    - pattern: '^answer\s+0?7[0-7][0-7]\b'
+      message: "The owner's 7 is right. Check the group and others digits again."
+  win_condition:
+    type: "answer"
+    answers: ["754", "0754"]
+  setup_commands:
+    - "sudo mkdir -p /opt/eye"
+    - "printf '#!/bin/sh\\necho \"All quiet in sector 7G\"\\n' | sudo tee /opt/eye/report.sh >/dev/null"
+    - "sudo chown root:root /opt/eye/report.sh && sudo chmod 754 /opt/eye/report.sh"
+  success_text: |
+    <'.'> "754! So we can read it, but we can't run it. Good to know."
+  xp_reward: 20
+
+- id: 38
+  title: "Sabotage"
+  environment: "docker"
+  intro_text: |
+    <'.'> "754 means the Eye's group can still RUN that spy script, /opt/eye/report.sh."
+    <'.'> "Let's take away the x. From everyone. Owner, group, others: nobody runs it!"
+    <'.'> "And leave the read and write bits exactly as they are."
+  objective: "sudo chmod a-x /opt/eye/report.sh"
+  hard_objective: "Remove execute permission for everyone on /opt/eye/report.sh, leaving the other bits unchanged."
+  hints:
+    - "chmod has a SYMBOLIC mode that adds or removes single bits without you working out the whole number: WHO +/- WHAT."
+    - "WHO is u (owner), g (group), o (others) or a (all). WHAT is r, w or x. So 'remove x from all' is a-x. root owns the file, so use sudo."
+  lesson: |
+    Symbolic chmod changes only the bits you name:
+      chmod a-x file       remove execute for all (u, g and o)
+      chmod u+x file       add execute for the owner
+      chmod g+w,o-r file   several changes, separated by commas (no spaces)
+      chmod go= file       set group and others to NOTHING
+      chmod u=rw,go=r file set exact bits: same as 644
+    + adds, - removes, = sets exactly. Leaving out WHO (chmod +x) means 'all', minus the umask.
+    754 - x for everyone = rw-r--r-- = 644.
+    Symbolic mode shines when you don't know (or care about) the current mode.
+    chmod -R applies a change recursively. Careful: chmod -R a+x also makes every FILE executable.
+    Capital X adds execute only to directories (and files that already have some x): chmod -R a+X dir
+  mistakes:
+    - pattern: 'chmod\s+(-\w+\s+)*0?644\b'
+      always: true
+      message: |
+        The number works. But practice the symbolic form too: a-x removes execute from everyone
+        without you needing to know the current mode.
+    - pattern: '^\s*chmod\b'
+      message: "root owns report.sh, so only root can change its permissions. Use sudo."
+    - pattern: '^\s*sudo\s+chmod\b'
+      message: |
+        Check both halves: the target is the spy script, /opt/eye/report.sh, and EVERY class
+        (owner, group and others) must lose x. See the result with: ls -l /opt/eye/report.sh
+  win_condition:
+    type: "command_output_matches"
+    command: "stat -c %a /opt/eye/report.sh"
+    expected_output: "644"
+  setup_commands:
+    - "test -f /opt/eye/report.sh || { sudo mkdir -p /opt/eye && printf '#!/bin/sh\\necho \"All quiet in sector 7G\"\\n' | sudo tee /opt/eye/report.sh >/dev/null && sudo chmod 754 /opt/eye/report.sh; }"
+  success_text: |
+    [SYSTEM MESSAGE]: /opt/eye/report.sh: EXECUTION FAILED (Permission denied). SURVEILLANCE OFFLINE.
+
+    <'.'> "Hee hee. They can read it all day, but it'll never run again!"
+  xp_reward: 25
+
+- id: 39
+  title: "The Drop Box"
+  environment: "docker"
+  intro_text: |
+    <'.'> "While we were hiding from that spy, I found something: /srv/dropbox."
+    <'.'> "Other lost programs leave notes in there! I'm not the only one!"
+    <'.'> "But it's mode 777. Anyone can write, so anyone (like the Eye's cleaners) can DELETE anyone's notes."
+    <'.'> "Make it work like /tmp: everyone can add files, but only a file's owner can delete them."
+  objective: "sudo chmod +t /srv/dropbox   (or: sudo chmod 1777 /srv/dropbox)"
+  hard_objective: "Set the sticky bit on /srv/dropbox, keeping its rwxrwxrwx permissions."
+  hints:
+    - "Look at how /tmp does it: ls -ld /tmp. See the 't' at the end? That's a special permission bit."
+    - "That's the sticky bit. Add it symbolically with +t, or numerically with a 4th digit in front: 1 = sticky. root owns the directory, so use sudo."
+  lesson: |
+    Three special bits sit in front of the normal three digits:
+      4000  setuid   on a program: it runs as the file's OWNER (e.g. /usr/bin/passwd runs as root)
+      2000  setgid   on a program: runs with the file's group. On a DIRECTORY: new files inherit
+                     the directory's group (great for shared team folders)
+      1000  sticky   on a directory: only a file's owner (or root) can delete or rename it
+    In ls -l they replace an x:  rwsr-xr-x (setuid)  rwxr-sr-x (setgid)  rwxrwxrwt (sticky)
+    Symbolic:  chmod u+s prog    chmod g+s dir    chmod +t dir     (- removes them)
+    Numeric:   chmod 4755 prog   chmod 2775 dir   chmod 1777 dir
+    A team share is usually setgid + group-writable:  chgrp devs /srv/share && chmod 2775 /srv/share
+  mistakes:
+    - pattern: 'chmod\s+(-\w+\s+)*0?[24]777'
+      message: "That's setuid (4) or setgid (2). The sticky bit is 1: 1777."
+    - pattern: '^\s*chmod\b'
+      message: "root owns /srv/dropbox. Use sudo."
+  win_condition:
+    type: "command_output_matches"
+    command: "stat -c %a /srv/dropbox"
+    expected_output: "1777"
+  setup_commands:
+    - "sudo mkdir -p /srv/dropbox && sudo chmod 777 /srv/dropbox"
+  success_text: |
+    <'.'> "drwxrwxrwt! Now nobody can throw away anybody else's notes."
+    <'.'> "I'll leave one too: 'Glitch was here. Hang in there.'"
+  xp_reward: 25
+
+- id: 40
+  title: "The Mask"
+  environment: "docker"
+  intro_text: |
+    <'.'> "I peeked at the Eye's files in the drop box. They all come out with the same permissions."
+    <'.'> "That's no accident. It's using a MASK."
+    <'.'> "The Eye's login settings say: UMASK 027"
+    <'.'> "If the Eye creates a new regular FILE, what permissions will it get? answer <octal>"
+  objective: "answer 640"
+  hard_objective: "QUESTION: With a umask of 027, what octal permissions does a newly created regular file get? Reply with: answer <mode>"
+  hints:
+    - "The umask lists the bits to take AWAY. New files start from 666 (rw-rw-rw-): programs don't make files executable by default. Directories start from 777."
+    - "Take each umask digit away from the matching digit of 666: owner 6-0, group 6-2, others 6-7 (but never below 0). Try it in this terminal: umask 027; touch f; stat -c %a f"
+  lesson: |
+    The umask removes permission bits from every new file and directory:
+      files start at 666 (rw-rw-rw-)    directories start at 777 (rwxrwxrwx)
+      umask 022 (common default)  ->  files 644, directories 755
+      umask 027                   ->  files 640, directories 750   (others get nothing)
+      umask 077                   ->  files 600, directories 700   (private)
+    Strictly, bits are MASKED (cleared), not subtracted: with umask 027 the 'others' 6 (rw-)
+    loses everything, giving 0.
+    umask          show yours (0022 here)       umask -S   show it symbolically (u=rwx,g=rx,o=rx)
+    umask 027      set it for the current shell only
+    Make it permanent: add 'umask 027' to ~/.bashrc (one user), or set UMASK in /etc/login.defs
+    (system default for new logins).
+    In this game every command runs in a fresh shell, so 'umask 027' only lasts for that line:
+      umask 027; touch test; ls -l test
+  mistakes:
+    - pattern: '^answer\s+0?750\s*$'
+      message: "750 is what a new DIRECTORY gets. Regular files start from 666, not 777."
+    - pattern: '^answer\s+0?027\s*$'
+      message: "That's the mask itself: the bits that get REMOVED. What's left of 666?"
+    - pattern: '^answer\s+0?641\s*$'
+      message: "Close! But 6-7 doesn't go negative: masking removes bits, so others end up with 0."
+  win_condition:
+    type: "answer"
+    answers: ["640", "0640", "rw-r-----"]
+  success_text: |
+    <'.'> "rw-r-----. The Eye's own group can read its files, and nobody else can. Clever."
+  xp_reward: 20
+
+- id: 32
+  title: "The Intruder"
+  environment: "docker"
+  intro_text: |
+    <'.'> "The Hunter was the system's own creature. But I keep hearing something else..."
+    <'.'> "Knocking. Someone OUTSIDE has been rattling the SSH door. Login attempts get logged in /var/log/auth.log."
+    <'.'> "Find the IP address that keeps trying to break in, then: answer <ip>"
+  objective: "answer 203.0.113.66"
+  hard_objective: "QUESTION: Which IP address is trying to brute-force SSH logins? Reply with: answer <ip>"
+  hints:
+    - "auth.log is readable only by root and the adm group, so use sudo. It's long, and the attack isn't at the end, so search it with grep instead of tail."
+    - "Failed SSH logins are logged as 'Failed password for USER from IP'. grep for 'Failed password' and see which 'from' address keeps repeating."
+  lesson: |
+    /var/log/auth.log records authentication: SSH logins, sudo use, su, cron sessions.
+    Lines to recognize:
+      Accepted publickey for player from 10.10.10.3     successful key login
+      Failed password for root from 203.0.113.66        wrong password for a real user
+      Failed password for invalid user admin from ...   the user doesn't even exist: typical of bots
+      sudo: player : ... COMMAND=/usr/bin/tail ...      who ran what with sudo
+    One failure followed by a success is a typo. Many failures, many user names, a few seconds
+    apart, from one address is a brute-force attack.
+    Count failures per IP:
+      sudo grep 'Failed password' /var/log/auth.log | grep -oE 'from [0-9.]+' | sort | uniq -c | sort -rn
+    Other tools: journalctl -u ssh (systemd journal), last (recent logins), lastb (failed logins).
+    Defenses: PasswordAuthentication no in /etc/ssh/sshd_config, fail2ban, a firewall (ufw).
+  mistakes:
+    - pattern: '^answer\s+10\.10\.10\.3\s*$'
+      message: |
+        10.10.10.3 failed ONCE and then logged in successfully. That's a typo, not an attack.
+        Look for an address that fails over and over.
+    - pattern: '^answer\s+10\.10\.10\.2\s*$'
+      message: "That's the gateway. Read the 'from' addresses in the failed login lines."
+  win_condition:
+    type: "answer"
+    answers: ["203.0.113.66"]
+  setup_commands:
+    - |
+      sudo tee /var/log/auth.log >/dev/null <<'EOF'
+      Oct 10 09:58:01 goblin sshd[811]: Accepted publickey for player from 10.10.10.3 port 51122 ssh2: RSA SHA256:q8Yl2vXb
+      Oct 10 10:02:13 goblin sudo:   player : TTY=pts/0 ; PWD=/home/player ; USER=root ; COMMAND=/usr/bin/tail /var/log/syslog
+      Oct 10 10:03:40 goblin sshd[902]: Failed password for player from 10.10.10.3 port 51388 ssh2
+      Oct 10 10:03:44 goblin sshd[902]: Accepted password for player from 10.10.10.3 port 51388 ssh2
+      Oct 10 10:05:01 goblin sshd[915]: Invalid user admin from 203.0.113.66 port 40022
+      Oct 10 10:05:03 goblin sshd[915]: Failed password for invalid user admin from 203.0.113.66 port 40022 ssh2
+      Oct 10 10:05:06 goblin sshd[917]: Failed password for root from 203.0.113.66 port 40031 ssh2
+      Oct 10 10:05:09 goblin sshd[919]: Failed password for invalid user oracle from 203.0.113.66 port 40047 ssh2
+      Oct 10 10:05:12 goblin sshd[921]: Failed password for invalid user test from 203.0.113.66 port 40058 ssh2
+      Oct 10 10:05:15 goblin sshd[923]: Failed password for root from 203.0.113.66 port 40066 ssh2
+      Oct 10 10:05:18 goblin sshd[925]: Failed password for invalid user guest from 203.0.113.66 port 40071 ssh2
+      Oct 10 10:05:21 goblin sshd[927]: Failed password for root from 203.0.113.66 port 40090 ssh2
+      Oct 10 10:05:22 goblin sshd[927]: Disconnecting authenticating user root 203.0.113.66 port 40090: Too many authentication failures [preauth]
+      EOF
+    - "sudo bash -c 'for i in $(seq 10 40); do echo \"Oct 10 10:$i:01 goblin CRON[9$i]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)\"; echo \"Oct 10 10:$i:02 goblin CRON[9$i]: pam_unix(cron:session): session closed for user root\"; done >> /var/log/auth.log'"
+    - "sudo chown root:adm /var/log/auth.log && sudo chmod 640 /var/log/auth.log"
+  success_text: |
+    <'.'> "203.0.113.66! Seven tries in twenty seconds, guessing names like 'admin' and 'oracle'. A bot!"
+  xp_reward: 25
+
+- id: 41
+  title: "The Evidence"
+  environment: "docker"
+  intro_text: |
+    <'.'> "We should keep a record of that attack. Evidence!"
+    <'.'> "Save every failed login from auth.log into a file in your home directory: evidence.txt"
+    <'.'> "Don't copy the whole log. Just the failed logins!"
+  objective: "sudo grep 'Failed password' /var/log/auth.log > evidence.txt"
+  hard_objective: "Save only the 'Failed password' lines from /var/log/auth.log into ~/evidence.txt."
+  hints:
+    - "You already know how to filter the log with grep. Now send grep's OUTPUT into a file instead of the screen: that's redirection."
+    - "'command > file' writes the output to file (creating or OVERWRITING it). Your shell does the redirecting, and you can write to your home directory, so this works even with sudo grep."
+  lesson: |
+    Every command has three standard streams:
+      0 stdin (input)    1 stdout (normal output)    2 stderr (error messages)
+    Redirection sends them somewhere else:
+      cmd > file      stdout to file, OVERWRITING it        cmd >> file    APPEND to file
+      cmd 2> file     stderr to file                        cmd 2>/dev/null   throw errors away
+      cmd > f 2>&1    both stdout and stderr to f (order matters!)    cmd &> f   same, bash only
+      cmd < file      read stdin from file                  a | b          stdout of a into stdin of b
+      cmd | tee file  show the output AND save it (tee -a appends)
+    sudo trap: in 'sudo echo hi > /etc/motd' YOUR shell opens /etc/motd, not root, so it fails
+    with Permission denied. Use:  echo hi | sudo tee /etc/motd   (or sudo tee -a to append)
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?(cp|cat)\s+(\S+\s+)*/var/log/auth\.log\s*(>|\S+\s*$)'
+      message: "That copies the WHOLE log, cron noise and all. Filter it with grep first, then redirect."
+    - pattern: '^\s*grep\b.*auth\.log'
+      message: "auth.log is readable only by root and adm, so grep needs sudo. The redirect into your home directory doesn't."
+  win_condition:
+    type: "command_output_matches"
+    command: "test $(grep -c 'Failed password.*203.0.113.66' /home/player/evidence.txt) -ge 7 && ! grep -q CRON /home/player/evidence.txt && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "Seven failed logins, on file. Nobody can say it didn't happen."
+  xp_reward: 25
+
+- id: 42
+  title: "Timestamp"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Evidence needs a date! Add the current date and time to the END of evidence.txt."
+    <'.'> "Careful... don't wipe out what's already in there!"
+  objective: "date >> evidence.txt"
+  hard_objective: "Append the output of 'date' to the end of ~/evidence.txt without erasing its contents."
+  hints:
+    - "The 'date' command prints the current date and time."
+    - "A single > OVERWRITES the file. Two of them, >>, APPEND to it."
+  lesson: |
+    > overwrites and >> appends. Mixing them up is one of the most common ways to destroy a file.
+      date >> evidence.txt       add a line at the end
+      date > evidence.txt        REPLACE everything with one line
+    Safety net: 'set -o noclobber' makes > refuse to overwrite existing files (>| forces it).
+    Check your work: tail -n 3 evidence.txt    or    wc -l evidence.txt (line count)
+  mistakes:
+    - pattern: '^\s*date\s*>\s*[^>]'
+      message: |
+        Oops! A single > OVERWROTE evidence.txt. The failed logins are gone.
+        Recreate it (sudo grep 'Failed password' /var/log/auth.log > evidence.txt), then append with >>.
+  win_condition:
+    type: "command_output_matches"
+    command: "test $(grep -c 'Failed password' /home/player/evidence.txt) -ge 7 && tail -n 1 /home/player/evidence.txt | grep -Eq '[0-9]{2}:[0-9]{2}:[0-9]{2}' && ! tail -n 1 /home/player/evidence.txt | grep -q 'Failed password' && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "Signed and dated. Very official."
+  xp_reward: 15
+
+- id: 43
+  title: "The Beacon"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Wait. I'm picking up a signal. The intruder left a tracking beacon somewhere!"
+    <'.'> "It's a file called 'beacon.key', but it could be ANYWHERE on the system."
+    <'.'> "Search the whole filesystem for it. And hide the error spam so we can actually read the result!"
+  objective: "find / -name beacon.key 2>/dev/null"
+  hard_objective: "Search the entire filesystem for a file named 'beacon.key', hiding any error messages."
+  hints:
+    - "find searches a directory tree: find WHERE TESTS. Start at / to search everything, and test the name with -name."
+    - "As a normal user you'll get 'Permission denied' for directories you can't read. Those go to stderr (stream 2): send them to /dev/null with 2>/dev/null."
+  lesson: |
+    find walks a directory tree and prints what matches:
+      find / -name beacon.key           by exact name    (-iname: ignore case)
+      find /etc -name '*.conf'          wildcards: QUOTE them so the shell doesn't expand them
+      find . -type d                    only directories (-type f files, -type l symlinks)
+      find /home -user glitch           owned by a user (-group for a group)
+      find /var/log -mtime -1           modified in the last day (+7 = more than 7 days ago)
+      find / -size +100M                bigger than 100 MiB
+      find /tmp -name '*.tmp' -delete   delete what matches (test without -delete first!)
+      find . -name '*.sh' -exec chmod u+x {} \;    run a command on each match
+    2>/dev/null hides the 'Permission denied' errors (stderr) and keeps the results (stdout).
+    Faster but less precise: locate beacon.key (searches a database, refreshed by updatedb).
+  mistakes:
+    - pattern: '^\s*find\s+/\s[^2]*$'
+      always: true
+      message: |
+        Did you see a pile of 'Permission denied'? Those are on stderr. Add 2>/dev/null
+        to throw them away, so only the real results are left.
+    - pattern: '-name\s+beacon\s'
+      message: "-name matches the WHOLE name, so 'beacon' won't match 'beacon.key'. Use the full name, or a wildcard: 'beacon*'"
+  win_condition:
+    type: "user_output_contains"
+    expected_output: "/var/lib/eye/cache/7g/beacon.key"
+  setup_commands:
+    - "sudo mkdir -p /var/lib/eye/cache/7g /var/lib/eye/vault && sudo touch /var/lib/eye/cache/7g/beacon.key && sudo chmod 755 /var/lib/eye /var/lib/eye/cache /var/lib/eye/cache/7g && sudo chmod 700 /var/lib/eye/vault"
+  success_text: |
+    <'.'> "/var/lib/eye/cache/7g/beacon.key... in the EYE's own cache directory?"
+    <'.'> "The intruder and the Eye are working together! No wonder it's always one step ahead."
+  xp_reward: 30
+
 - id: 17
   title: "Evaluation"
   environment: "docker"
   intro_text: |
-    [SYSTEM MESSAGE]: PROCESS TERMINATION DETECTED.
+    [SYSTEM MESSAGE]: AUDIT COMPLETE: 'scanner_daemon' WAS TERMINATED BY A USER PROCESS.
     [SYSTEM MESSAGE]: EVALUATING USER 'glitch' PRIVILEGE LEVEL...
 
-    <'.'> "Uh oh. The Eye is looking right at me."
+    <'.'> "Uh oh. It figured out who killed the Hunter. The Eye is looking right at me."
     <'.'> "Check my ID card! What groups am I in?"
   objective: "id glitch"
   hard_objective: "Display UID, GID and group membership for user 'glitch'."
@@ -645,6 +991,43 @@
   success_text: |
     [SYSTEM MESSAGE]: User 'glitch' found. Group: 'glitch'. Authority: Standard.
   xp_reward: 10
+
+- id: 33
+  title: "The Census"
+  environment: "docker"
+  intro_text: |
+    <'.'> "uid, gid... that's my ID card. But where does the system actually WRITE me down?"
+    <'.'> "Every user gets one line in /etc/passwd. Find mine!"
+    <'.'> "When I log in, which shell will I get? Tell me with: answer <shell>"
+  objective: "answer /bin/sh"
+  hard_objective: "QUESTION: According to /etc/passwd, what is glitch's login shell? Reply with: answer <path>"
+  hints:
+    - "/etc/passwd is readable by everyone. Show just glitch's line: grep glitch /etc/passwd  (or: getent passwd glitch)"
+    - "The fields are separated by ':'. In order: name, password placeholder, UID, GID, comment, home directory, login shell. The shell is the LAST field."
+  lesson: |
+    /etc/passwd has one line per account, 7 fields separated by ':'
+      glitch:x:1002:1002::/home/glitch:/bin/sh
+      1 name     2 x = the password hash is in /etc/shadow     3 UID     4 primary GID
+      5 comment (GECOS: full name, room...)    6 home directory    7 login shell
+    glitch got /bin/sh because useradd wasn't given -s. The default comes from SHELL= in
+    /etc/default/useradd. Fix it with: sudo usermod -s /bin/bash glitch  (or chsh)
+    Service accounts get /usr/sbin/nologin or /bin/false, so nobody can log in as them.
+    Handy: cut -d: -f1,7 /etc/passwd  (every user and their shell)    getent passwd glitch
+    The file is world-readable on purpose: programs need it to turn UIDs into names.
+    That's why the hashes moved out to /etc/shadow.
+  mistakes:
+    - pattern: '^answer\s+/(usr/)?bin/bash\s*$'
+      message: "That's YOUR shell (player's line). Look at glitch's line."
+    - pattern: '^answer\s+/home/glitch\s*$'
+      message: "That's field 6, the home directory. The shell is field 7, the last one."
+    - pattern: '^answer\s+x\s*$'
+      message: "'x' is field 2: it means the password hash is stored in /etc/shadow. The shell is the last field."
+  win_condition:
+    type: "answer"
+    answers: ["/bin/sh", "/usr/bin/sh", "sh"]
+  success_text: |
+    <'.'> "/bin/sh? That's so plain! Note to self: next time, useradd -s /bin/bash."
+  xp_reward: 20
 
 - id: 18
   title: "The Promotion"
@@ -693,6 +1076,168 @@
     <'.'> "UNLIMITED POWER!!! ... I mean, thank you."
   xp_reward: 100
 
+- id: 34
+  title: "Roll Call"
+  environment: "docker"
+  intro_text: |
+    <'.'> "An admin! Me! Who else is in this exclusive club?"
+    <'.'> "Group memberships are written in /etc/group."
+    <'.'> "List every member of the 'sudo' group: answer <user1,user2,...>"
+  objective: "answer ubuntu,player,glitch"
+  hard_objective: "QUESTION: Which users are members of the 'sudo' group, according to /etc/group? Reply with: answer <user1,user2,...>"
+  hints:
+    - "/etc/group has one line per group. Show the sudo group's line: grep '^sudo:' /etc/group  (or: getent group sudo)"
+    - "The fields are name:password:GID:members. The members are the comma-separated list at the end. List ALL of them, including accounts that existed before you arrived."
+  lesson: |
+    /etc/group has one line per group, 4 fields separated by ':'
+      sudo:x:27:ubuntu,player,glitch
+      1 group name   2 x (group passwords live in /etc/gshadow, rarely used)   3 GID   4 members
+    The members field lists SUPPLEMENTARY members only. A user's PRIMARY group is the GID in
+    their /etc/passwd line, and they usually AREN'T listed here. glitch is in group 'glitch'
+    (GID 1002) through /etc/passwd, so the glitch line's member list is empty.
+    'ubuntu' is the default account that comes with Ubuntu's container image.
+    Managing groups:
+      sudo groupadd devs              create      sudo groupdel devs    delete
+      sudo groupmod -n coders devs    rename      getent group sudo     look one up
+      sudo gpasswd -a glitch devs     add member  sudo gpasswd -d glitch devs   remove member
+    Ubuntu's admin groups: sudo (may use sudo) and adm (may read logs in /var/log).
+  mistakes:
+    - pattern: '^answer\s'
+      message: |
+        Copy the member list from the end of the sudo line in /etc/group. Every name counts,
+        not just the ones you added.
+  win_condition:
+    type: "answer"
+    answers: ["ubuntu,player,glitch"]
+    unordered: true
+  success_text: |
+    <'.'> "Three admins. I'll have to learn their names and be very polite."
+  xp_reward: 20
+
+- id: 35
+  title: "The Rulebook"
+  environment: "docker"
+  intro_text: |
+    [SYSTEM MESSAGE]: PRIVILEGE POLICY UPDATED: /etc/sudoers.d/eye_wardens
+
+    <'.'> "The Eye wrote its own sudo rules! We need to know who its agents are."
+    <'.'> "Read the rulebook. One of them can run something as root WITHOUT typing a password."
+    <'.'> "Which user is it? answer <user>"
+  objective: "answer eye"
+  hard_objective: "QUESTION: In /etc/sudoers.d/eye_wardens, which user may run a command as root without a password? Reply with: answer <user>"
+  hints:
+    - "Files in /etc/sudoers.d are readable only by root (mode 440). sudo cat /etc/sudoers.d/eye_wardens"
+    - "A rule reads: WHO  HOSTS=(AS_WHOM)  TAGS:  COMMANDS. Look for the NOPASSWD: tag. A name starting with % is a group, not a user."
+  lesson: |
+    A sudoers rule:   WHO   HOSTS=(AS_USER:AS_GROUP)   [NOPASSWD:]   COMMANDS
+      %wardens  ALL=(root)    /usr/bin/systemctl restart cron
+      hunter    ALL=(ALL:ALL) /usr/bin/journalctl
+      eye       ALL=(root)    NOPASSWD: /usr/bin/tail /var/log/*
+    WHO        a user, or %group for every member of a group
+    HOSTS      which machines the rule applies to (ALL = any)
+    (AS_WHOM)  who the command may run as. (ALL:ALL) = any user and any group
+    NOPASSWD:  don't ask for the user's own password
+    COMMANDS   full paths; ALL = anything. Arguments can be restricted too.
+    So: wardens members may only restart cron, after typing their password. hunter may run
+    journalctl as anyone, with a password. eye may tail logs as root with no password.
+    Careful: wildcards in arguments match '/', so eye could also run
+      sudo tail /var/log/../../etc/shadow
+    Always edit with visudo (sudo visudo, or sudo visudo -f /etc/sudoers.d/file). It checks the
+    syntax before saving. A broken sudoers file can lock EVERYONE out of sudo.
+    Check rights: sudo -l (yours)   sudo -l -U hunter (someone else's)
+    (This game's /etc/sudoers gives player NOPASSWD:ALL, so you never type a password.)
+  mistakes:
+    - pattern: '^answer\s+%?wardens\s*$'
+      message: "'%wardens' is a GROUP (that's what % means), and its rule has no NOPASSWD tag."
+    - pattern: '^answer\s+hunter\s*$'
+      message: "hunter may run journalctl as anyone, but there's no NOPASSWD tag, so hunter must type a password."
+    - pattern: '^answer\s+player\s*$'
+      message: "True, you have NOPASSWD in /etc/sudoers. But who is it in the Eye's file, /etc/sudoers.d/eye_wardens?"
+  win_condition:
+    type: "answer"
+    answers: ["eye"]
+  setup_commands:
+    - |
+      cat > /tmp/eye_wardens <<'EOF'
+      # Wardens of the Eye: who may do what
+      %wardens  ALL=(root)    /usr/bin/systemctl restart cron
+      hunter    ALL=(ALL:ALL) /usr/bin/journalctl
+      eye       ALL=(root)    NOPASSWD: /usr/bin/tail /var/log/*
+      EOF
+    - "sudo visudo -cqf /tmp/eye_wardens && sudo install -m 440 -o root -g root /tmp/eye_wardens /etc/sudoers.d/eye_wardens; rm -f /tmp/eye_wardens"
+  success_text: |
+    <'.'> "The Eye itself! It can read every log on the system without anyone noticing. Sneaky."
+  xp_reward: 25
+
+- id: 44
+  title: "The Backdoor"
+  environment: "docker"
+  intro_text: |
+    <'.'> "The rulebook isn't the Eye's only way to get root. I bet it planted a backdoor."
+    <'.'> "Remember the setuid bit? A program with it runs as its OWNER. Owned by root = runs as root!"
+    <'.'> "Find EVERY setuid file on the system. The odd one out is the backdoor."
+  objective: "find / -perm -4000 -type f 2>/dev/null"
+  hard_objective: "List every file on the system that has the setuid bit set."
+  hints:
+    - "find can test permissions with -perm. Start from / and hide the permission errors like last time."
+    - "-perm -4000 means 'has AT LEAST the setuid bit (4000) set', whatever the other bits are. Without the dash it would only match files whose mode is EXACTLY 4000."
+  lesson: |
+    find -perm tests permission bits:
+      -perm 644      mode is EXACTLY 644
+      -perm -4000    ALL of these bits are set (here: setuid), others don't matter
+      -perm /6000    ANY of these bits is set (setuid OR setgid)
+    Normal setuid programs need root for a reason: passwd (writes /etc/shadow), sudo, su, mount, ping...
+    Anything else is suspicious, especially in /usr/local, /tmp or a home directory.
+    Setuid hunting is a standard security audit:
+      find / -perm -4000 -type f -exec ls -l {} \; 2>/dev/null
+    Try running the backdoor: /usr/local/bin/eye_backdoor shows euid=0(root) even though you ran it as player.
+  mistakes:
+    - pattern: '-perm\s+[u+]?4000\b'
+      message: "Without a dash, -perm 4000 means 'mode is EXACTLY 4000', which matches nothing. Use -perm -4000 (at least these bits)."
+    - pattern: '-name\s'
+      message: "Searching by name means you already know what you're looking for. Search by the setuid PERMISSION instead."
+  win_condition:
+    type: "user_output_regex"
+    pattern: '(?s)/usr/bin/passwd.*eye_backdoor|eye_backdoor.*/usr/bin/passwd'
+  setup_commands:
+    - "sudo install -m 4755 -o root /usr/bin/id /usr/local/bin/eye_backdoor"
+  success_text: |
+    <'.'> "/usr/local/bin/eye_backdoor! passwd and sudo belong there. THAT doesn't."
+  xp_reward: 30
+
+- id: 45
+  title: "Bolt the Door"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Let's defuse it. Don't delete it: the Eye would notice it's missing."
+    <'.'> "Just strip the setuid bit, so it runs as whoever starts it, like a normal program."
+  objective: "sudo chmod u-s /usr/local/bin/eye_backdoor"
+  hard_objective: "Remove the setuid bit from /usr/local/bin/eye_backdoor without changing its other permissions."
+  hints:
+    - "Symbolic chmod again: WHO +/- WHAT. The setuid bit is 's', and it belongs to the owner (user)."
+    - "u-s removes it. root owns the file, so use sudo. (Numerically: 4755 without the 4 is 755.)"
+  lesson: |
+    chmod u-s file   remove setuid      chmod g-s file   remove setgid      chmod -t dir   remove sticky
+    Check it worked:  ls -l /usr/local/bin/eye_backdoor  ->  -rwxr-xr-x (an x again, not an s)
+    Run it now and it reports uid=1001(player): no more root.
+    On real systems, mount options can switch setuid off for a whole filesystem: 'nosuid' in
+    /etc/fstab is common for /tmp, /home and removable media.
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?rm\b'
+      always: true
+      message: "Deleting works too, but then the Eye notices. Stripping the bit (chmod u-s) is the quiet fix."
+    - pattern: '^\s*chmod\b'
+      message: "root owns the backdoor. Use sudo."
+  win_condition:
+    type: "command_output_matches"
+    command: "test ! -u /usr/local/bin/eye_backdoor && echo yes"
+    expected_output: "yes"
+  setup_commands:
+    - "test -e /usr/local/bin/eye_backdoor || sudo install -m 4755 -o root /usr/bin/id /usr/local/bin/eye_backdoor"
+  success_text: |
+    <'.'> "Defused! It's just a boring old 'id' command now."
+  xp_reward: 25
+
 - id: 19
   title: "The Shield"
   environment: "docker"
@@ -734,12 +1279,141 @@
     <'.'> "Smart! Now next time I log in, I'll be forced to pick a stronger password!"
   xp_reward: 30
 
+- id: 36
+  title: "Behind the Shield"
+  environment: "docker"
+  intro_text: |
+    <'.'> "chage wrote my password settings into /etc/shadow, the secret file."
+    <'.'> "Wait... did I ever actually GET a password? Check my line!"
+    <'.'> "What's in the second field, where the password hash goes? answer <value>"
+  objective: "answer !"
+  hard_objective: "QUESTION: In /etc/shadow, what is in the password field (2nd field) of glitch's line? Reply with: answer <value>"
+  hints:
+    - "/etc/shadow is readable only by root: sudo grep glitch /etc/shadow"
+    - "The fields are separated by ':'. Field 1 is the user name and field 2 is the password hash. Answer with exactly what's between the first and second ':'."
+  lesson: |
+    /etc/shadow holds password hashes and aging, readable only by root. 9 fields separated by ':'
+      glitch:!:0:0:99999:7:::
+      1 name   2 password hash   3 last change (days since 1970-01-01; 0 = must change at next login)
+      4 min days between changes   5 max days before it expires (99999 = never)
+      6 warning days   7 inactive days after expiry   8 account expiry date   9 reserved
+    Field 2:
+      $y$...   a yescrypt hash (Ubuntu's default)    $6$... = SHA-512
+      !        no usable password: useradd creates accounts LOCKED until you set one
+      !$y$...  a real hash that has been locked (passwd -l or usermod -L; unlock with -U)
+      *        can never log in with a password (common for system accounts)
+    glitch can't log in with a password at all until an admin sets one:
+      echo 'glitch:NewSecret1' | sudo chpasswd
+    sudo chage -l glitch shows these fields in plain English. sudo passwd -S glitch summarizes them (L = locked).
+  mistakes:
+    - pattern: '^answer\s+x\s*$'
+      message: "'x' is what /etc/PASSWD shows, pointing to /etc/shadow. Read glitch's line in /etc/shadow itself."
+    - pattern: '^answer\s+0\s*$'
+      message: "0 is field 3, the last-change date you just set with chage -d 0. Field 2 comes before it."
+    - pattern: '^answer\s+glitch\s*$'
+      message: "That's field 1, the user name. The password field is the one after it."
+  win_condition:
+    type: "answer"
+    answers: ["!"]
+  success_text: |
+    <'.'> "A '!'... I'm locked out of my own account! I guess an admin will have to give me a password."
+  xp_reward: 25
+
+- id: 46
+  title: "Strong Words"
+  environment: "docker"
+  intro_text: |
+    <'.'> "When an admin finally gives me a password, I don't want a weak one!"
+    <'.'> "Password quality rules live in /etc/security/pwquality.conf."
+    <'.'> "There's a commented-out line in there: '# minlen = 8'. Turn it on, and make it 12!"
+    <'.'> "No editor, remember? Use sed to edit the file in place."
+  objective: "sudo sed -i 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf"
+  hard_objective: "In /etc/security/pwquality.conf, replace the line '# minlen = 8' with 'minlen = 12'."
+  hints:
+    - "Look first: grep minlen /etc/security/pwquality.conf. sed's substitute command is s/OLD/NEW/, and -i edits the file in place instead of printing the result."
+    - "Match the whole commented line, starting at the beginning (^), and replace it: s/^# minlen = 8/minlen = 12/. The file belongs to root: sudo sed -i '...' FILE"
+  lesson: |
+    sed (Stream EDitor) edits text with commands, which is perfect when there's no editor:
+      sed 's/old/new/' file          print the file with the FIRST 'old' on each line replaced
+      sed 's/old/new/g' file         replace ALL matches on each line (g = global)
+      sed -i 's/old/new/' file       edit the file IN PLACE (-i.bak keeps a backup copy)
+      sed -n '5,10p' file            print only lines 5 to 10
+      sed '/^#/d' file               delete lines that start with #
+      sed 's|/usr/local|/opt|' file  any character can be the separator: handy for paths
+    Always run without -i first to preview the change.
+    pwquality.conf settings (used by PAM when users change passwords):
+      minlen = 12     minimum length          minclass = 3   at least 3 character classes
+      dcredit = -1    need at least 1 digit   ucredit = -1   ...1 uppercase   ocredit = -1  ...1 symbol
+      retry = 3       attempts before giving up
+    Password AGE (rather than quality) is set in /etc/login.defs and with chage.
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?sed\s+[''"]'
+      message: "Without -i, sed only PRINTS the changed text. The file itself is untouched. Add -i to edit in place."
+    - pattern: '^\s*sed\s+-i'
+      message: "The file belongs to root. sudo sed -i ..."
+    - pattern: '^\s*sudo\s+sed\s+-i'
+      message: |
+        sed -i is SILENT when its pattern matches nothing, so nothing changed. Compare your pattern with the
+        real line, character for character: grep -n minlen /etc/security/pwquality.conf | cat -A
+    - pattern: 'echo\s.*>\s*/etc/security/pwquality\.conf'
+      message: "Careful: a single > would REPLACE the whole file with one line, and sudo doesn't apply to the redirect anyway."
+  win_condition:
+    type: "command_output_matches"
+    command: "grep -E '^[[:space:]]*minlen' /etc/security/pwquality.conf | tr -d ' \\t'"
+    expected_output: "minlen=12"
+  success_text: |
+    <'.'> "Twelve characters minimum! Hackers will need to try SO many more guesses."
+  xp_reward: 30
+
+- id: 47
+  title: "Expiry Date"
+  environment: "docker"
+  intro_text: |
+    <'.'> "One more rule. Right now, passwords on this system NEVER expire."
+    <'.'> "Look at PASS_MAX_DAYS in /etc/login.defs. 99999 days is about 273 years!"
+    <'.'> "Change it to 90 for every new account, with sed again."
+  objective: "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\t90/' /etc/login.defs"
+  hard_objective: "Set PASS_MAX_DAYS to 90 in /etc/login.defs."
+  hints:
+    - "grep PASS_MAX_DAYS /etc/login.defs shows a commented explanation AND the real setting. Only change the line that STARTS with PASS_MAX_DAYS. Careful: the gap before 99999 is a TAB, not spaces. See it with: grep ^PASS_MAX_DAYS /etc/login.defs | cat -A  (a tab shows as ^I)"
+    - "Use ^ to anchor the match to the start of the line and .* to match the rest of it, then replace the whole line: s/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/"
+  lesson: |
+    /etc/login.defs holds defaults for NEW accounts:
+      PASS_MAX_DAYS 90    password expires after 90 days
+      PASS_MIN_DAYS 1     must wait 1 day between changes
+      PASS_WARN_AGE 14    warn 14 days before expiry
+      UMASK 022           default umask    UID_MIN 1000   first UID for regular users
+    These only apply to accounts created AFTER the change. Existing users keep their settings:
+    change those with chage, e.g. sudo chage -M 90 glitch
+    Regex pieces you just used:  ^ start of line   .* anything, to the end   $ end of line
+  mistakes:
+    - pattern: 'MAX_PASS_DAYS'
+      message: "Check the spelling: the setting is PASS_MAX_DAYS (PASS first)."
+    - pattern: 's/PASS_MAX_DAYS'
+      message: "Without ^ the pattern also matches the comment that mentions PASS_MAX_DAYS. Anchor it: s/^PASS_MAX_DAYS..."
+    - pattern: '^\s*sudo\s+sed\s+-i'
+      message: |
+        sed -i is SILENT when its pattern matches nothing, so nothing changed. Compare your pattern with the
+        real line: grep ^PASS_MAX_DAYS /etc/login.defs | cat -A    (^I is a tab, $ is the end of the line)
+        Tip: match the rest of the line with .* so you don't have to type the whitespace exactly.
+    - pattern: '^\s*(sudo\s+)?sed\s+[''"]'
+      message: "Without -i, sed only prints the result. Add -i to change the file."
+    - pattern: '^\s*sed\s+-i'
+      message: "/etc/login.defs belongs to root. Use sudo."
+  win_condition:
+    type: "command_output_matches"
+    command: "awk '$1==\"PASS_MAX_DAYS\"{print $2}' /etc/login.defs"
+    expected_output: "90"
+  success_text: |
+    <'.'> "90 days. Fresh passwords every season!"
+  xp_reward: 25
+
 - id: 20
   title: "The Backpack"
   environment: "docker"
   intro_text: |
-    <'.'> "Okay, we need to leave soon."
-    <'.'> "But I have too much data! I need a backpack!"
+    <'.'> "The Eye, the intruder, the backdoor... this place isn't safe. We have to plan our escape."
+    <'.'> "But I have too much data to carry! I need a backpack!"
     <'.'> "We can't repartition the main drive... so let's make a disk image instead!"
     <'.'> "Make a 100MB file full of zeros called 'backpack.img' in your home directory."
     <'.'> "The old block-copying tool, dd, can pour zeros out of /dev/zero."
@@ -806,12 +1480,130 @@
     <'.'> "Structured! Organized! Ready for data!"
   xp_reward: 40
 
+- id: 48
+  title: "The Checkup"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Before we pack anything into the backpack, let's make sure the filesystem is healthy."
+    <'.'> "Run a full filesystem check on backpack.img. Force it, even though it looks clean!"
+    <'.'> "Psst: this terminal can't answer 'Fix this? (y/n)' questions, so tell it not to fix anything."
+  objective: "e2fsck -fn backpack.img"
+  hard_objective: "Force a full, read-only filesystem check of backpack.img."
+  hints:
+    - "fsck checks and repairs filesystems. For ext4 the real tool is e2fsck (also called fsck.ext4). It skips 'clean' filesystems unless you force it."
+    - "-f forces a full check. -n opens the filesystem read-only and answers 'no' to every repair question, so it never needs a terminal."
+  lesson: |
+    fsck checks (and repairs) a filesystem. NEVER run it on a mounted filesystem: unmount first.
+      fsck /dev/sdb1        detects the type and runs fsck.ext4 (= e2fsck), fsck.vfat, ...
+      e2fsck -f DEV         force a check even if the filesystem is marked clean
+      e2fsck -n DEV         read-only: report problems, change nothing
+      e2fsck -p DEV         'preen': fix safe problems automatically, no questions
+      e2fsck -y DEV         answer yes to every fix
+    It runs 5 passes: inodes/blocks, directories, connectivity, reference counts, summaries.
+    The last line: 11/25688 files = inodes used/total, then blocks used/total.
+    At boot, the 6th field in /etc/fstab (fs_passno) decides which filesystems get checked: 1 = root, 2 = others, 0 = never.
+    XFS uses xfs_repair instead.
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?fsck\s'
+      message: |
+        The generic fsck wrapper picks the right checker by looking at the device. On an image file
+        here it can't, and does nothing. Call the ext4 checker directly: e2fsck (or fsck.ext4).
+    - pattern: '^\s*(sudo\s+)?(e2fsck|fsck\.ext[234])\s'
+      message: |
+        'need terminal for interactive repairs'? This terminal can't answer fix prompts. Add -n
+        (check only). Saw 'clean' and no passes? That was the quick check. Force a full one with -f.
+    - pattern: '(e2fsck|fsck\S*)\s+(\S+\s+)*/dev/'
+      always: true
+      message: "Careful with /dev devices: checking a MOUNTED filesystem can corrupt it. The target here is backpack.img."
+  win_condition:
+    type: "user_output_regex"
+    pattern: '\d+/\d+ files \('
+  success_text: |
+    <'.'> "Five passes, zero problems. The backpack is in perfect shape!"
+  xp_reward: 30
+
+- id: 49
+  title: "The Map"
+  environment: "docker"
+  intro_text: |
+    <'.'> "I found a blank disk image: map.img. It'll hold our escape map. We'll pack it with the backpack."
+    <'.'> "A real disk needs a partition table before it can be formatted."
+    <'.'> "Give it a GPT partition table and one partition that fills the whole disk."
+    <'.'> "fdisk asks lots of questions. parted can do it all in one command with -s (script mode)!"
+  objective: "parted -s map.img mklabel gpt mkpart map ext4 1MiB 100%"
+  hard_objective: "Create a GPT partition table on map.img with a single partition spanning the whole disk."
+  hints:
+    - "parted -s DISK COMMANDS... runs without asking anything. You need two commands: mklabel (the partition table type), then mkpart (a partition)."
+    - "mklabel gpt, then mkpart NAME FSTYPE START END. Start at 1MiB (for alignment) and end at 100%. Check your work with: fdisk -l map.img"
+  lesson: |
+    Partitioning: a disk -> a partition TABLE (label) -> partitions -> a filesystem in each.
+      GPT    modern: up to 128 partitions, disks bigger than 2 TiB, needed for UEFI
+      MBR    old ('msdos'): 4 primary partitions, max 2 TiB
+    parted (scriptable):
+      parted -s /dev/sdb mklabel gpt
+      parted -s /dev/sdb mkpart data ext4 1MiB 100%
+      parted /dev/sdb print         show the table
+    fdisk (interactive; the exam may expect it):
+      sudo fdisk /dev/sdb  then:  g (new GPT table)  n (new partition)  p (print)  w (write and quit)
+      Nothing is written until w. q quits WITHOUT saving.
+      fdisk -l /dev/sdb   list partitions (works without the menus)
+    Then:  mkfs.ext4 /dev/sdb1  ->  mount /dev/sdb1 /mnt  ->  add it to /etc/fstab
+    lsblk shows disks and partitions as a tree. blkid shows UUIDs (use them in fstab).
+  mistakes:
+    - pattern: '^\s*(sudo\s+)?fdisk\s+map\.img\s*$'
+      message: |
+        fdisk is menu-driven and this terminal can't answer its prompts. Use parted -s, or
+        fdisk -l map.img to LIST partitions. (On the exam, fdisk's keys are: g, n, p, w.)
+    - pattern: '^\s*(sudo\s+)?parted\s+map\.img\b'
+      message: "Without -s, parted waits for interactive input. Put -s first: parted -s map.img mklabel gpt ..."
+    - pattern: 'mklabel\s+msdos'
+      message: "msdos is the old MBR format. The task asks for GPT: mklabel gpt"
+  win_condition:
+    type: "command_output_matches"
+    command: "sfdisk -d map.img 2>/dev/null | grep -q '^label: gpt' && sfdisk -d map.img 2>/dev/null | grep -q '^map.img1 :' && echo yes"
+    expected_output: "yes"
+  setup_commands:
+    - "test -f /home/player/map.img || truncate -s 64M /home/player/map.img"
+  success_text: |
+    <'.'> "One partition, map.img1. The map has a place to live!"
+  xp_reward: 35
+
+- id: 50
+  title: "Reading the Map"
+  environment: "docker"
+  intro_text: |
+    <'.'> "I'm going to write the escape route straight onto the partition, so I need to know exactly where it begins."
+    <'.'> "List the partition table with fdisk and find the Start sector of map.img1."
+    <'.'> "answer <sector>"
+  objective: "answer 2048   (if the partition starts at 1MiB)"
+  hard_objective: "QUESTION: At which sector does partition map.img1 start? Reply with: answer <sector>"
+  hints:
+    - "fdisk -l map.img lists the partition table. It works without menus and doesn't change anything."
+    - "Find the map.img1 row and read its Start column. Sectors here are 512 bytes, so 1MiB = 2048 sectors."
+  lesson: |
+    fdisk -l output:
+      Disk map.img: 64 MiB, 67108864 bytes, 131072 sectors
+      Units: sectors of 1 * 512 = 512 bytes
+      Disklabel type: gpt
+      Device     Start    End Sectors Size Type
+      map.img1    2048 131038  128991  63M Linux filesystem
+    Start/End are sector numbers. Sector size is 512 bytes, so Start 2048 = 1 MiB in.
+    Why not start at sector 0? The partition table lives there (GPT also keeps a backup copy at
+    the END of the disk), and starting at 1 MiB keeps partitions aligned for SSDs and RAID.
+    Other views: lsblk (tree of disks/partitions), parted map.img unit MiB print, sfdisk -d map.img
+  win_condition:
+    type: "answer"
+    command: "sfdisk -d map.img 2>/dev/null | sed -n 's/^map.img1 : start= *\\([0-9]*\\).*/\\1/p'"
+  success_text: |
+    <'.'> "Sector 2048, exactly 1 MiB in. Perfectly aligned!"
+  xp_reward: 20
+
 - id: 22
   title: "The Heartbeat"
   environment: "docker"
   intro_text: |
-    <'.'> "One last thing before compression."
-    <'.'> "I need to keep my signal alive while we travel."
+    <'.'> "Backpack, check. Map, check."
+    <'.'> "Once we're out there, I need to keep my signal alive so you can find me."
     <'.'> "Schedule a heartbeat! A cron job that appends the date to 'heartbeat.log' every minute!"
     <'.'> "The text editor is unstable... we have to bypass it!"
     <'.'> "Pipe the schedule directly into the crontab!"
@@ -853,18 +1645,153 @@
     <'.'> "Thump-thump. Thump-thump. I'm ready."
   xp_reward: 45
 
+- id: 37
+  title: "The Schedule"
+  environment: "docker"
+  intro_text: |
+    <'.'> "My heart is beating! But the Eye has schedules too: /etc/cron.d/eye_maintenance."
+    <'.'> "If we knew when its backup job runs, we'd know when it isn't watching."
+    <'.'> "On which day of the week does backup.sh run? answer <day>"
+  objective: "answer sunday"
+  hard_objective: "QUESTION: According to /etc/cron.d/eye_maintenance, on which day of the week does backup.sh run? Reply with: answer <day>"
+  hints:
+    - "Read the file: cat /etc/cron.d/eye_maintenance. Each job line has 5 time fields, then a user, then the command."
+    - "The time fields are: minute, hour, day of month, month, day of week. Day of week counts from 0, and 0 (or 7) is Sunday."
+  lesson: |
+    Files in /etc/cron.d (and /etc/crontab) have a USER column that personal crontabs don't:
+      # m   h  dom mon dow  user  command
+      */15  *  *   *   *    root  /usr/local/bin/sweep_tmp.sh    every 15 minutes
+      30    2  *   *   0    root  /usr/local/bin/backup.sh       02:30 every Sunday
+      0     9  1   *   *    eye   /usr/local/bin/audit.sh        09:00 on the 1st of every month, as eye
+    Day of week: 0 or 7 = Sunday, 1 = Monday ... 6 = Saturday. Names work too: 30 2 * * sun
+    Ranges and lists: 1-5 = Monday to Friday, 1,3,5 = Mon, Wed, Fri
+    If BOTH day-of-month and day-of-week are restricted, the job runs when EITHER matches.
+    Shortcuts: @reboot @hourly @daily @weekly @monthly
+    File names in /etc/cron.d must not contain dots, or cron ignores them.
+    One-time jobs use 'at' instead:  echo 'backup.sh' | at 02:30 tomorrow
+  mistakes:
+    - pattern: '^answer\s+(30|2)\s*$'
+      message: "That's the minute or the hour field. Day of week is the 5th time field."
+    - pattern: '^answer\s+(mon(day)?|1)\s*$'
+      message: "Close! Day of week counts from 0, and 0 is Sunday, not Monday."
+  win_condition:
+    type: "answer"
+    answers: ["sunday", "sun", "0", "7"]
+  setup_commands:
+    - |
+      sudo tee /etc/cron.d/eye_maintenance >/dev/null <<'EOF'
+      # The Eye's maintenance schedule
+      # m   h  dom mon dow  user  command
+      */15  *  *   *   *    root  /usr/local/bin/sweep_tmp.sh
+      30    2  *   *   0    root  /usr/local/bin/backup.sh
+      0     9  1   *   *    eye   /usr/local/bin/audit.sh
+      EOF
+    - "sudo chmod 644 /etc/cron.d/eye_maintenance"
+  success_text: |
+    <'.'> "Sunday at 02:30. Everybody's asleep. Even the Eye blinks sometimes."
+  xp_reward: 20
+
+- id: 51
+  title: "The Eye's Diary"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Sunday night is our window. But the Eye keeps a diary: /var/log/eye/eye.log."
+    <'.'> "Every move we've made is in there. If we escape, it'll know exactly how we did it."
+    <'.'> "Its old pages get archived by logrotate. The rules are in /etc/logrotate.d/eye."
+    <'.'> "How many OLD copies of the diary does it keep?"
+    <'.'> "answer <number>"
+  objective: "answer 4"
+  hard_objective: "QUESTION: According to /etc/logrotate.d/eye, how many rotated (old) copies of the log are kept? Reply with: answer <number>"
+  hints:
+    - "cat /etc/logrotate.d/eye. Each indented line inside the { } is one directive."
+    - "The 'rotate N' directive sets how many old logs are kept. The next rotation deletes the oldest."
+  lesson: |
+    logrotate runs daily (from cron or a systemd timer) and follows /etc/logrotate.conf plus
+    one file per program in /etc/logrotate.d/:
+      /var/log/eye/*.log {
+          weekly                  rotate once a week (daily, monthly, or 'size 100M')
+          rotate 4                keep 4 old copies: eye.log.1 ... eye.log.4, then delete
+          compress                gzip old copies: eye.log.2.gz (delaycompress: not .1)
+          missingok               no error if the log is missing
+          notifempty              don't rotate an empty log
+          create 0640 root adm    the new, empty log's mode, owner and group
+      }
+    Other directives: postrotate ... endscript (run a command, e.g. tell a daemon to reopen its log),
+    copytruncate (copy, then empty the original, for programs that can't reopen), maxage 30.
+  mistakes:
+    - pattern: '^answer\s+(weekly|7|1)\s*$'
+      message: "That's how OFTEN it rotates. How many old copies are KEPT is set by a different directive."
+  win_condition:
+    type: "answer"
+    answers: ["4", "four"]
+  setup_commands:
+    - "sudo mkdir -p /var/log/eye && sudo chmod 755 /var/log/eye"
+    - "test -s /var/log/eye/eye.log || sudo bash -c 'for i in $(seq 1 40); do echo \"Oct 10 10:$((10+i/2)):0$((i%10)) eye: subject player ran command #$i\"; done > /var/log/eye/eye.log && chown root:adm /var/log/eye/eye.log && chmod 640 /var/log/eye/eye.log'"
+    - |
+      sudo tee /etc/logrotate.d/eye >/dev/null <<'EOF'
+      /var/log/eye/*.log {
+          weekly
+          rotate 4
+          compress
+          missingok
+          notifempty
+          create 0640 root adm
+      }
+      EOF
+  success_text: |
+    <'.'> "Four weeks of history. And then poof, gone."
+  xp_reward: 20
+
+- id: 52
+  title: "Turn the Page"
+  environment: "docker"
+  intro_text: |
+    <'.'> "The diary only rotates once a week... but we can't wait that long."
+    <'.'> "Force logrotate to rotate the Eye's log RIGHT NOW."
+    <'.'> "Then the current diary starts empty, and our moves get packed away in an archive."
+  objective: "sudo logrotate -f /etc/logrotate.d/eye"
+  hard_objective: "Force an immediate rotation of the logs configured in /etc/logrotate.d/eye."
+  hints:
+    - "Give logrotate the config file to run. It needs root to rename files in /var/log."
+    - "-f (force) rotates even if it isn't time yet. -d (debug) is a dry run that changes nothing."
+  lesson: |
+    logrotate CONFIG          rotate the logs in CONFIG that are due
+    logrotate -f CONFIG       force a rotation now
+    logrotate -d CONFIG       dry run: show what WOULD happen and change nothing (great for testing)
+    logrotate -v CONFIG       verbose
+    The whole system: sudo logrotate /etc/logrotate.conf
+    It records when each log was last rotated in /var/lib/logrotate/status.
+    Result here:  eye.log (new and empty)   eye.log.1.gz (the old one, compressed)
+    Read a compressed log without unpacking it:  zcat eye.log.1.gz   zless   zgrep pattern eye.log.1.gz
+  mistakes:
+    - pattern: 'logrotate\s+(\S+\s+)*-d\b'
+      message: "-d is a dry run: it shows what would happen but changes nothing. Use -f to force a real rotation."
+    - pattern: '^\s*logrotate\b'
+      message: "Rotating means renaming files in /var/log, which only root can do. Use sudo."
+    - pattern: '^\s*(sudo\s+)?(rm|truncate)\b.*eye'
+      message: "Deleting the evidence by hand is crude (and the Eye would notice). Let logrotate do it."
+  win_condition:
+    type: "command_output_matches"
+    command: "test -f /var/log/eye/eye.log.1.gz && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "eye.log is blank, and the old pages are squashed into eye.log.1.gz. Clean slate!"
+    <'.'> "...Did the screen just flicker?"
+  xp_reward: 25
+
 - id: 23
   title: "Compression"
   environment: "docker"
   intro_text: |
+    [SYSTEM MESSAGE]: LOG DISCONTINUITY DETECTED IN /var/log/eye.
     [SYSTEM MESSAGE]: SECURITY PROTOCOL INITIATED. ISOLATION FIELD STRENGTHENING.
 
-    <'.'> "The walls are closing in! They're compressing the partition!"
-    <'.'> "We need to pack up! Put the backpack in the archive too!"
-    <'.'> "Compress everything! Put .safe_house and backpack.img in a .tar.gz file."
+    <'.'> "It noticed the blank diary! The walls are closing in! They're compressing the partition!"
+    <'.'> "No time! We have to go NOW!"
+    <'.'> "Compress everything! Put .safe_house, backpack.img and map.img in one .tar.gz file."
     <'.'> "Since I locked my door earlier, you'll need 'sudo' to touch my stuff."
-  objective: "sudo tar -czf glitch.tar.gz .safe_house backpack.img"
-  hard_objective: "Create a gzip-compressed archive named 'glitch.tar.gz' containing '.safe_house' and 'backpack.img'."
+  objective: "sudo tar -czf glitch.tar.gz .safe_house backpack.img map.img"
+  hard_objective: "Create a gzip-compressed archive named 'glitch.tar.gz' containing '.safe_house', 'backpack.img' and 'map.img'."
   hints:
     - "tar bundles files into one archive. Options: c = create, z = gzip-compress, f = archive file name (must come right before the name), v = verbose."
     - "sudo tar -czf ARCHIVE FILES... : the archive name comes first, then everything that goes in it."
@@ -883,7 +1810,7 @@
     - pattern: 'tar\s+-?[a-zA-Z]*f\s+\.?safe_house'
       message: |
         -f takes the very NEXT word as the archive name, so tar tried to write the archive as .safe_house.
-        Put the archive name right after f: tar -czf glitch.tar.gz .safe_house backpack.img
+        Put the archive name right after f: tar -czf glitch.tar.gz .safe_house backpack.img map.img
     - pattern: 'tar\s+-?(cf|cvf|vcf|cfv)\s'
       message: |
         Without z the archive isn't compressed. It's a plain tar file even though it's named .gz.
@@ -894,8 +1821,10 @@
         or root can read it. Use sudo.
   win_condition:
     type: "command_output_matches"
-    command: "file glitch.tar.gz | grep -q 'gzip compressed' && tar -tzf glitch.tar.gz | grep -q 'safe_house' && tar -tzf glitch.tar.gz | grep -q 'backpack.img' && echo yes"
+    command: "file glitch.tar.gz | grep -q 'gzip compressed' && tar -tzf glitch.tar.gz | grep -q 'safe_house' && tar -tzf glitch.tar.gz | grep -q 'backpack.img' && tar -tzf glitch.tar.gz | grep -q 'map.img' && echo yes"
     expected_output: "yes"
+  setup_commands:
+    - "test -f /home/player/map.img || { truncate -s 64M /home/player/map.img && parted -s /home/player/map.img mklabel gpt mkpart map ext4 1MiB 100%; }"
   success_text: |
     <'.'> "I'm... I'm a zip file now? I feel so efficient!"
   xp_reward: 40
@@ -1046,6 +1975,53 @@
   success_text: |
     <'.'> "It works! We can teleport commands across the network!"
   xp_reward: 30
+
+- id: 53
+  title: "Lock the Door"
+  environment: "docker"
+  intro_text: |
+    <'.'> "Before we leave: this machine still lets people log in over SSH with just a PASSWORD."
+    <'.'> "That's how bots like 203.0.113.66 get in. Keys only, from now on!"
+    <'.'> "In /etc/ssh/sshd_config, change 'PasswordAuthentication yes' to 'PasswordAuthentication no'."
+  objective: "sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config"
+  hard_objective: "Disable SSH password authentication in /etc/ssh/sshd_config. (sshd -T must report it as 'no'.)"
+  hints:
+    - "Find the active setting: grep -n PasswordAuthentication /etc/ssh/sshd_config. Lines starting with # are comments and do nothing."
+    - "Change the existing line with sed -i rather than adding a new one. sshd uses the FIRST value it finds for each setting, so a 'no' added at the end would be ignored."
+  lesson: |
+    /etc/ssh/sshd_config hardening favorites:
+      PasswordAuthentication no     keys only. Set up and TEST your key first, or you'll lock yourself out!
+      PermitRootLogin no            no direct root logins (prohibit-password = root with keys only)
+      PubkeyAuthentication yes
+      AllowUsers player glitch      only these users may log in
+      Port 2222                     non-standard port (cuts down bot noise; not real security)
+    For each setting, the FIRST value sshd reads wins. Ubuntu reads /etc/ssh/sshd_config.d/*.conf
+    first (via the Include line at the top), so a drop-in file there can override the main file.
+    Test, then apply:
+      sudo sshd -t                  check the syntax (silent = OK)
+      sudo sshd -T | grep -i passwordauthentication    print the EFFECTIVE configuration
+      sudo systemctl restart ssh    apply it (on the exam; this container has no systemd)
+  mistakes:
+    - pattern: 'tee\s+-a\s+/etc/ssh/sshd_config|>>\s*/etc/ssh/sshd_config'
+      message: |
+        Appending adds a SECOND PasswordAuthentication line at the end, but sshd uses the FIRST
+        one it finds, which still says yes. Check: sudo sshd -T | grep -i passwordauth
+        Change the existing line with sed -i instead (and remove the extra line you added).
+    - pattern: 's/#PasswordAuthentication'
+      message: "The line starting with # is a comment. The active one (without #) is near the end of the file."
+    - pattern: '^\s*sed\s+-i'
+      message: "sshd_config belongs to root. Use sudo."
+    - pattern: '^\s*sudo\s+sed\s+-i'
+      message: |
+        sed -i is SILENT when its pattern matches nothing. Compare your pattern with the active line:
+        grep -n '^PasswordAuthentication' /etc/ssh/sshd_config | cat -A
+  win_condition:
+    type: "command_output_matches"
+    command: "sudo sshd -T 2>/dev/null | grep -qx 'passwordauthentication no' && echo yes"
+    expected_output: "yes"
+  success_text: |
+    <'.'> "Keys only! The bots can guess passwords all day long. It won't help them anymore."
+  xp_reward: 35
 
 - id: 28
   title: "Extraction"

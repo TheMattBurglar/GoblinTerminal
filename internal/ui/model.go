@@ -49,7 +49,8 @@ type Model struct {
 	// Game state
 	state           game.GameState
 	currentQuestIdx int
-	hintLevel       int // hints revealed for the current quest
+	hintLevel       int  // hints revealed for the current quest
+	answerReminded  bool // told the player how to reply to the current question
 	gameStarted     bool
 	ready           bool
 	output          []string // Output buffer for the virtual terminal
@@ -125,13 +126,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.output = append(m.output, "Environment ready.")
 
 		// Restore environment state (users, permissions) if needed
-		if err := m.manager.RestoreEnvironment(m.currentQuestIdx); err != nil {
+		if err := m.manager.RestoreEnvironment(m.questDone); err != nil {
 			m.output = append(m.output, fmt.Sprintf("Warning: State restoration issue: %v", err))
 		}
 
 		// Display loaded game message if we are not at 0
-		if m.currentQuestIdx > 0 {
-			m.output = append(m.output, fmt.Sprintf("Resuming from Quest %d...", m.quests[m.currentQuestIdx].ID))
+		if m.currentQuestIdx > 0 && m.currentQuestIdx < len(m.quests) {
+			m.output = append(m.output, fmt.Sprintf("Resuming from Quest %d...", m.currentQuestIdx+1))
 		}
 		m.output = append(m.output, "")
 
@@ -150,16 +151,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.stderr != "" {
 			m.output = append(m.output, splitOutput(msg.stderr)...)
 		}
+		// Output still counts when the exit status is non-zero: find exits 1
+		// after any 'Permission denied', even when it found what it was asked.
+		// A timed-out command was killed, so its partial output doesn't.
+		m.lastOutput = msg.stdout
 		if msg.err != nil {
-			m.lastOutput = ""
 			switch {
 			case errors.Is(msg.err, docker.ErrTimeout):
+				m.lastOutput = ""
 				m.output = append(m.output, dimStyle.Render("[Timed out after 5s. This terminal can't answer interactive prompts.]"))
 			case msg.stderr == "":
 				m.output = append(m.output, dimStyle.Render(fmt.Sprintf("[%v]", msg.err)))
 			}
-		} else {
-			m.lastOutput = msg.stdout
+		}
+
+		// Question quests only finish with 'answer', so say so once.
+		if m.currentQuestIdx < len(m.quests) && m.quests[m.currentQuestIdx].IsQuestion() && !m.answerReminded {
+			m.answerReminded = true
+			m.output = append(m.output, hintStyle.Render("<'.'> Found it? Tell me with: answer <your answer>"))
 		}
 
 		// Check win condition
@@ -252,6 +261,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if cmd == "answer" || strings.HasPrefix(cmd, "answer ") {
+				return m, m.submitAnswer(cmd)
+			}
+
 			if isInteractive(cmd) {
 				m.output = append(m.output, tipLines(fmt.Sprintf(
 					"This training terminal can't run full-screen or interactive programs.\n"+
@@ -303,6 +316,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.output = append(m.output, mistakeFeedback(completedQuest, msg.cmd, msg.passed)...)
 
 		if !msg.passed {
+			if completedQuest.IsQuestion() {
+				m.output = append(m.output, "<'.'> Hmm... that's not it. Take another look.")
+			}
 			stats.Attempts++
 			m.saveState()
 			if nudgeAfter[stats.Attempts] && !m.hardMode && m.hintLevel < completedQuest.TotalHints() {
@@ -339,7 +355,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Show next quest info in Glitch box
 			m.glitchText = fmt.Sprintf("(Next: %s)\n%s", q.Title, q.IntroText)
 			m.hintLevel = m.state.QuestStats(q.ID).HintsUsed
-			m.output = append(m.output, fmt.Sprintf("--- QUEST %d: %s ---", q.ID, q.Title))
+			m.answerReminded = false
+			m.output = append(m.output, questHeader(nextIdx, q))
 
 			// Run setup commands for the new quest
 			return m, m.performQuestSetup(q)
@@ -359,10 +376,54 @@ func (m *Model) startQuest(idx int) tea.Cmd {
 	m.currentQuestIdx = idx
 	q := m.quests[idx]
 	m.hintLevel = m.state.QuestStats(q.ID).HintsUsed
+	m.answerReminded = false
 	m.glitchText = q.IntroText
-	m.output = append(m.output, fmt.Sprintf("--- QUEST %d: %s ---", q.ID, q.Title))
+	m.output = append(m.output, questHeader(idx, q))
 
 	return m.performQuestSetup(q)
+}
+
+// questHeader is the banner printed when a quest starts. Quests are numbered
+// by position: IDs are stable keys for saves and can be out of order.
+func questHeader(idx int, q game.Quest) string {
+	kind := "QUEST"
+	if q.IsQuestion() {
+		kind = "QUESTION"
+	}
+	return fmt.Sprintf("--- %s %d: %s ---", kind, idx+1, q.Title)
+}
+
+// submitAnswer checks a reply to the current question quest.
+func (m *Model) submitAnswer(cmd string) tea.Cmd {
+	if m.currentQuestIdx >= len(m.quests) || !m.quests[m.currentQuestIdx].IsQuestion() {
+		m.output = append(m.output, "<'.'> Nobody asked you a question! Solve this one with a command.")
+		return nil
+	}
+	reply := strings.TrimSpace(strings.TrimPrefix(cmd, "answer"))
+	if reply == "" {
+		m.output = append(m.output, "Usage: answer <your answer>")
+		return nil
+	}
+	wc := m.quests[m.currentQuestIdx].WinCondition
+	idx := m.currentQuestIdx
+	return func() tea.Msg {
+		var accepted []string
+		if wc.Command != "" {
+			out, _ := m.manager.ExecuteValidation(wc.Command)
+			accepted = splitOutput(strings.TrimSpace(out))
+		}
+		return questCheckMsg{idx: idx, passed: wc.CheckAnswer(reply, accepted...), cmd: cmd}
+	}
+}
+
+// questDone reports whether the quest with this ID comes before the current one.
+func (m Model) questDone(id int) bool {
+	for i := 0; i < m.currentQuestIdx && i < len(m.quests); i++ {
+		if m.quests[i].ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // revealHint shows the next hint for the current quest. The final hint is
@@ -403,11 +464,18 @@ func (m *Model) revealHint() {
 	}
 }
 
+// commonMistakes apply to every quest, on top of the quest's own.
+var commonMistakes = []game.Mistake{
+	game.NewMistake(`\bGlitch\b`, `Linux names are case-sensitive: 'Glitch' and 'glitch' are different users.
+The user is 'glitch', all lower case. If you created 'Glitch' by accident, remove it:
+  sudo userdel -r Glitch`),
+}
+
 // mistakeFeedback returns explanations for any known mistakes the command
 // matches. If the quest was passed, only mistakes marked Always are shown.
 func mistakeFeedback(q game.Quest, cmd string, passed bool) []string {
 	var lines []string
-	for _, mistake := range q.Mistakes {
+	for _, mistake := range append(q.Mistakes, commonMistakes...) {
 		if (!passed || mistake.Always) && mistake.Matches(cmd) {
 			lines = append(lines, tipLines(mistake.Message)...)
 		}
@@ -416,7 +484,7 @@ func mistakeFeedback(q game.Quest, cmd string, passed bool) []string {
 }
 
 func (m Model) saveState() {
-	m.state.CurrentQuestID = m.currentQuestIdx
+	m.state.SetQuestIndex(m.quests, m.currentQuestIdx)
 	_ = game.SaveState(m.state)
 }
 
@@ -448,6 +516,10 @@ func (m *Model) checkWinCondition(userCmd string) tea.Cmd {
 	}
 
 	q := m.quests[m.currentQuestIdx]
+	if q.IsQuestion() {
+		// Commands are for investigating; only 'answer' can complete it.
+		return nil
+	}
 	idx := m.currentQuestIdx
 	lastOutput := m.lastOutput
 	currentDir := m.manager.CurrentDir
@@ -570,6 +642,7 @@ func lessonLines(q game.Quest) []string {
 func helpText() []string {
 	return []string{
 		"Game commands:",
+		"  answer X  Reply to a QUESTION quest, e.g.  answer 644",
 		"  hint      Reveal the next clue for the current quest (the last clue is the full command)",
 		"  history   Show commands you've run",
 		"  clear     Clear the screen",

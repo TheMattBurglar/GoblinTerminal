@@ -285,15 +285,12 @@ func (m *Manager) ResetStorage() error {
 	return nil
 }
 
-// RestoreEnvironment ensures the container state matches the expected progress based on quest ID
-// This handles cases like re-creating the 'glitch' user if the container was recreated
-func (m *Manager) RestoreEnvironment(questID int) error {
-	// questID is the index of the current quest, so quest N has been
-	// completed when questID >= N.
-
+// RestoreEnvironment ensures the container state matches the player's progress.
+// This handles cases like re-creating the 'glitch' user if the container was recreated.
+// done reports whether the quest with the given ID has been completed.
+func (m *Manager) RestoreEnvironment(done func(questID int) bool) error {
 	// Quest 10: Create glitch user
-	// If we are past quest 10, glitch user must exist
-	if questID >= 10 {
+	if done(10) {
 		// Check if user exists using RunAsRoot (which returns error on failure)
 		// ExecuteValidation swallows errors so it returns nil error even if user is missing
 		err := m.RunAsRoot("id glitch")
@@ -321,7 +318,7 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 	}
 
 	// Quest 18: Add glitch to sudo
-	if questID >= 18 {
+	if done(18) {
 		// Check if glitch is sudoer
 		out, _ := m.ExecuteValidation("groups glitch")
 		if !strings.Contains(out, "sudo") {
@@ -332,12 +329,12 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 	}
 
 	// Quest 19: Force glitch's password to expire
-	if questID >= 19 {
+	if done(19) {
 		_ = m.RunAsRoot("chage -d 0 glitch")
 	}
 
 	// Ensure ownership of .safe_house if past Quest 11
-	if questID >= 11 {
+	if done(11) {
 		// Quest 11: "sudo chown glitch /home/player/.safe_house"
 		if _, err := m.ExecuteValidation("test -d /home/player/.safe_house"); err == nil {
 			_ = m.RunAsRoot("chown glitch /home/player/.safe_house")
@@ -345,7 +342,7 @@ func (m *Manager) RestoreEnvironment(questID int) error {
 	}
 
 	// Ensure permissions of .safe_house if past Quest 12
-	if questID >= 12 {
+	if done(12) {
 		// Quest 12: "sudo chmod 700 /home/player/.safe_house"
 		if _, err := m.ExecuteValidation("test -d /home/player/.safe_house"); err == nil {
 			_ = m.RunAsRoot("chmod 700 /home/player/.safe_house")

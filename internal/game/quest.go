@@ -1,6 +1,10 @@
 package game
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+	"strings"
+)
 
 // WinConditionType defines how we check if a quest is done
 type WinConditionType string
@@ -19,6 +23,11 @@ const (
 	UserOutputHasResult WinConditionType = "user_output_contains_result"
 	CurrentDirMatch     WinConditionType = "current_working_directory"
 	Custom              WinConditionType = "custom_check"
+	// Answer is a question quest: the player investigates with normal
+	// commands, then replies with 'answer <value>'. Passes if the value is
+	// one of Answers, or a line printed by Command when the right answer
+	// depends on what the player did earlier.
+	Answer WinConditionType = "answer"
 )
 
 // WinCondition defines the criteria for completing a quest
@@ -32,6 +41,40 @@ type WinCondition struct {
 	// RejectOutput fails user-output checks if any of these strings appear,
 	// e.g. to make sure the player filtered a file instead of cat-ing it.
 	RejectOutput []string `yaml:"reject_output,omitempty"`
+	// Answers are the accepted replies for Answer quests. Case, quotes and
+	// spacing are ignored, and commas and spaces both separate list items.
+	Answers []string `yaml:"answers,omitempty"`
+	// Unordered accepts list answers in any order, e.g. group members.
+	Unordered bool `yaml:"unordered,omitempty"`
+}
+
+var answerSeparators = regexp.MustCompile(`[\s,]+`)
+
+// normalizeAnswer makes answers comparable: lower case, no surrounding
+// quotes, list items separated by single commas.
+func (wc *WinCondition) normalizeAnswer(a string) string {
+	a = strings.ToLower(strings.TrimSpace(a))
+	a = strings.Trim(a, `"'`)
+	items := answerSeparators.Split(strings.Trim(a, " ,"), -1)
+	if wc.Unordered {
+		sort.Strings(items)
+	}
+	return strings.Join(items, ",")
+}
+
+// CheckAnswer reports whether the player's answer is one of Answers or of
+// the extra accepted answers.
+func (wc *WinCondition) CheckAnswer(answer string, accepted ...string) bool {
+	given := wc.normalizeAnswer(answer)
+	if given == "" {
+		return false
+	}
+	for _, a := range append(accepted, wc.Answers...) {
+		if wc.normalizeAnswer(a) == given {
+			return true
+		}
+	}
+	return false
 }
 
 // Mistake is a common wrong approach to a quest. When the player's command
@@ -44,6 +87,11 @@ type Mistake struct {
 	Always  bool   `yaml:"always,omitempty"`
 
 	re *regexp.Regexp
+}
+
+// NewMistake builds a Mistake in code, for mistakes that apply to every quest.
+func NewMistake(pattern, message string) Mistake {
+	return Mistake{Pattern: pattern, Message: message, re: regexp.MustCompile(pattern)}
 }
 
 // Matches reports whether the command matches this mistake's pattern.
@@ -72,6 +120,11 @@ type Quest struct {
 	XPReward      int          `yaml:"xp_reward"`
 	Environment   string       `yaml:"environment"` // "local" or "container_image:..."
 	SetupCommands []string     `yaml:"setup_commands,omitempty"`
+}
+
+// IsQuestion reports whether the quest is completed with 'answer'.
+func (q *Quest) IsQuestion() bool {
+	return q.WinCondition.Type == Answer
 }
 
 // TotalHints is the number of hint levels, including the final reveal of

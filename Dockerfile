@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
     cron \
     rsyslog \
     fdisk \
+    parted \
     file \
     # Clean up to keep image small
     && rm -rf /var/lib/apt/lists/*
@@ -48,6 +49,15 @@ RUN mkdir /var/run/sshd && \
 RUN useradd -m -s /bin/bash player && \
     usermod -aG sudo player && \
     echo "player:$(echo Z29ibGlu | base64 -d)" | chpasswd
+
+# Password quality rules (/etc/security/pwquality.conf). Installed after the
+# player's password is set, so the short game password isn't rejected.
+RUN apt-get update && apt-get install -y libpam-pwquality && \
+    rm -rf /var/lib/apt/lists/*
+
+# Containers have no udev. parted calls udevadm after writing a partition
+# table, so stub it out instead of printing "udevadm: not found".
+RUN ln -s /bin/true /usr/local/bin/udevadm
 
 # Create wrappers for ssh commands to handle non-interactive mode and passwords
 # Pass "goblin" as password automatically

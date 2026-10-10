@@ -14,9 +14,49 @@ type QuestStats struct {
 }
 
 type GameState struct {
-	CurrentQuestID int                 `json:"current_quest_id"`
-	MsgLog         []string            `json:"msg_log"` // Optional: save history? For now just quest ID is key.
-	Stats          map[int]*QuestStats `json:"stats,omitempty"`
+	// CurrentQuest is the ID of the quest in progress. Saves track IDs, not
+	// positions, so quests can be inserted without breaking old saves.
+	CurrentQuest int  `json:"current_quest,omitempty"`
+	Complete     bool `json:"complete,omitempty"`
+	// LegacyIndex is the old save format: the 0-based position of the
+	// current quest, from when quest N was always at position N-1.
+	LegacyIndex *int                `json:"current_quest_id,omitempty"`
+	MsgLog      []string            `json:"msg_log"` // Optional: save history? For now just quest ID is key.
+	Stats       map[int]*QuestStats `json:"stats,omitempty"`
+}
+
+// legacyQuestCount is how many quests existed when saves stored positions.
+const legacyQuestCount = 30
+
+// QuestIndex returns the position in quests to resume from. A finished game
+// returns len(quests).
+func (s *GameState) QuestIndex(quests []Quest) int {
+	id := s.CurrentQuest
+	if s.Complete {
+		return len(quests)
+	}
+	if id == 0 && s.LegacyIndex != nil {
+		if *s.LegacyIndex >= legacyQuestCount {
+			return len(quests)
+		}
+		id = *s.LegacyIndex + 1
+	}
+	for i, q := range quests {
+		if q.ID == id {
+			return i
+		}
+	}
+	return 0
+}
+
+// SetQuestIndex records the position of the current quest in quests.
+func (s *GameState) SetQuestIndex(quests []Quest, idx int) {
+	s.LegacyIndex = nil
+	s.Complete = idx >= len(quests)
+	s.CurrentQuest = 0
+	if !s.Complete && idx >= 0 {
+		s.CurrentQuest = quests[idx].ID
+	}
 }
 
 // QuestStats returns the stats for a quest ID, creating them if needed.
