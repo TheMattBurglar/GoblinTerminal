@@ -26,12 +26,10 @@ type commandResultMsg struct {
 // nudgeAfter lists the failed-attempt counts at which Glitch suggests a hint.
 var nudgeAfter = map[int]bool{3: true, 6: true, 10: true}
 
-// interactiveCommands match programs that need a real TTY. This terminal runs
-// each command non-interactively, so they would hang until the timeout.
-var interactiveCommands = []*regexp.Regexp{
-	regexp.MustCompile(`^\s*(sudo\s+)?(nano|vi|vim|emacs|top|htop|visudo|vipw|vigr|sudoedit)(\s|$)`),
-	regexp.MustCompile(`^\s*(sudo\s+)?crontab\s+(-u\s+\S+\s+)?-e\b`),
-	regexp.MustCompile(`^\s*(sudo\s+)?passwd(\s+[a-z_][a-z0-9_-]*)?\s*$`),
+// terminalDoneMsg arrives when a program that had the real terminal exits.
+type terminalDoneMsg struct {
+	cmd string
+	err error
 }
 
 var (
@@ -159,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 			case errors.Is(msg.err, docker.ErrTimeout):
 				m.lastOutput = ""
-				m.output = append(m.output, dimStyle.Render("[Timed out after 5s. This terminal can't answer interactive prompts.]"))
+				m.output = append(m.output, dimStyle.Render("[Timed out after 5s. Is it waiting for input? Type 'shell' for a full terminal.]"))
 			case msg.stderr == "":
 				m.output = append(m.output, dimStyle.Render(fmt.Sprintf("[%v]", msg.err)))
 			}
@@ -173,6 +171,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Check win condition
 		return m, m.checkWinCondition(msg.cmd)
+
+	case terminalDoneMsg:
+		// Show what the session printed and check the quest, as if the
+		// command had run here.
+		return m, func() tea.Msg {
+			out := cleanTranscript(m.manager.FinishSession())
+			return commandResultMsg{cmd: msg.cmd, stdout: out, err: msg.err}
+		}
 
 	case tea.KeyMsg:
 		if !m.ready {
@@ -265,15 +271,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.submitAnswer(cmd)
 			}
 
-			if isInteractive(cmd) {
-				m.output = append(m.output, tipLines(fmt.Sprintf(
-					"This training terminal can't run full-screen or interactive programs.\n"+
-						"Use a non-interactive form instead (e.g. echo/tee/sed to edit files,\n"+
-						"'crontab -' to load a crontab, chpasswd to set passwords).\n"+
-						"On the real exam you WILL use editors like nano. Practice them in a real shell:\n"+
-						"  %s exec -it %s bash",
-					m.manager.Runtime, m.manager.ContainerName))...)
-				return m, nil
+			if cmd == "shell" {
+				return m, tea.ExecProcess(m.manager.ShellCommand(), func(err error) tea.Msg {
+					// Leaving the shell with a failed last command isn't an error.
+					return terminalDoneMsg{cmd: cmd}
+				})
+			}
+			if needsTerminal(cmd) {
+				return m, tea.ExecProcess(m.manager.TerminalCommand(cmd), func(err error) tea.Msg {
+					return terminalDoneMsg{cmd: cmd, err: err}
+				})
 			}
 
 			return m, func() tea.Msg {
@@ -469,6 +476,8 @@ var commonMistakes = []game.Mistake{
 	game.NewMistake(`\bGlitch\b`, `Linux names are case-sensitive: 'Glitch' and 'glitch' are different users.
 The user is 'glitch', all lower case. If you created 'Glitch' by accident, remove it:
   sudo userdel -r Glitch`),
+	game.NewMistake(`^\s*(nano|vim?|vi|emacs)\s+/etc/`, `Files in /etc belong to root. Without sudo the editor can open them, but saving
+fails with 'Permission denied'. Quit without saving, then: sudo nano FILE (or sudoedit FILE)`),
 }
 
 // mistakeFeedback returns explanations for any known mistakes the command
@@ -599,15 +608,6 @@ func rejected(output string, reject []string) bool {
 	return false
 }
 
-func isInteractive(cmd string) bool {
-	for _, re := range interactiveCommands {
-		if re.MatchString(cmd) {
-			return true
-		}
-	}
-	return false
-}
-
 func splitOutput(s string) []string {
 	lines := strings.Split(s, "\n")
 	// Filter out empty last line often caused by split
@@ -644,9 +644,12 @@ func helpText() []string {
 		"Game commands:",
 		"  answer X  Reply to a QUESTION quest, e.g.  answer 644",
 		"  hint      Reveal the next clue for the current quest (the last clue is the full command)",
+		"  shell     Open a full bash shell in the container. Type exit to come back; the quest is checked then",
 		"  history   Show commands you've run",
 		"  clear     Clear the screen",
 		"  exit      Quit the game (progress is saved)",
+		"Editors, pagers and prompts (nano, vim, less, top, fdisk, passwd, adduser...) open full-screen and",
+		"return here when you quit them.",
 		"Keys: Up/Down = command history, PgUp/PgDn = scroll output, Ctrl+H = toggle Hard Mode (no hints)",
 		"Finding answers yourself (allowed on the real exam!):",
 		"  man <command>              Read a command's manual",

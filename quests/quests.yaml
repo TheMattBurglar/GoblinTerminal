@@ -329,8 +329,10 @@
       sudo useradd -u 1500 glitch           -u: pick a specific UID
     New accounts go in /etc/passwd (account info) and /etc/shadow (password hashes).
     New homes are copied from /etc/skel. Defaults: /etc/default/useradd and /etc/login.defs.
-    Set a password: sudo passwd glitch (interactive)  or  echo 'glitch:secret' | sudo chpasswd
-    Ubuntu also has 'adduser', a friendlier interactive wrapper that creates the home for you.
+    Set a password: sudo passwd glitch   (it asks twice, and shows nothing as you type)
+      Scripted, without questions: echo 'glitch:secret' | sudo chpasswd
+    Ubuntu also has 'adduser glitch': a friendlier wrapper that asks for a password and details
+    and creates the home for you. Try it some time; it's handy, but useradd works on every distro.
     Delete a user: sudo userdel glitch   (-r also deletes their home directory)
     You just used 'man' to find an option. The real exam lets you use man pages too!
   mistakes:
@@ -343,9 +345,10 @@
     - pattern: '^\s*useradd\b'
       message: "Creating users writes to /etc/passwd and /etc/shadow, which only root can do. Prefix with sudo."
     - pattern: '^\s*(sudo\s+)?adduser\b'
+      always: true
       message: |
-        adduser is interactive (it asks for a password), and this terminal can't answer prompts.
-        Use useradd here. (Non-interactive adduser: sudo adduser --disabled-password --gecos '' glitch)
+        adduser is Ubuntu's friendly wrapper: it asks questions and makes the home for you.
+        Learn useradd too. It's the same on every distro, and tasks often name its options (-m, -s, -G).
   win_condition:
     type: "command_output_matches"
     command: "id -u glitch >/dev/null 2>&1 && test -d /home/glitch && echo yes"
@@ -461,13 +464,14 @@
     The pipe '|' sends one command's output into the next command's input:
       ps -e | grep scanner_daemon     filter the process list
     Shortcuts: pgrep scanner_daemon (prints the PID), pgrep -a name, pidof name
-    'top' (or htop) shows processes live. It can't run in this terminal, but know it for the exam.
+    'top' shows processes live. Try it! P sorts by CPU, M by memory, k kills a PID, q quits.
+      top -b -n 1    one snapshot as plain text (batch mode), handy in scripts
   mistakes:
     - pattern: '^\s*ps\s*(\||$)'
       always: true
       message: |
-        Plain 'ps' worked here only because this game's terminal has no TTY. On a real terminal it shows
-        just the processes started from THAT terminal, and would miss the daemon.
+        Plain 'ps' worked here only because this game's output pane has no TTY. In a real terminal
+        (type 'shell' to get one) it shows just the processes started from THAT terminal.
         Get in the habit of ps -e (or ps aux) to see everything.
   win_condition:
     type: "user_output_contains_result"
@@ -1303,7 +1307,7 @@
       !$y$...  a real hash that has been locked (passwd -l or usermod -L; unlock with -U)
       *        can never log in with a password (common for system accounts)
     glitch can't log in with a password at all until an admin sets one:
-      echo 'glitch:NewSecret1' | sudo chpasswd
+      sudo passwd glitch     or, scripted:  echo 'glitch:NewSecret1' | sudo chpasswd
     sudo chage -l glitch shows these fields in plain English. sudo passwd -S glitch summarizes them (L = locked).
   mistakes:
     - pattern: '^answer\s+x\s*$'
@@ -1326,27 +1330,33 @@
     <'.'> "When an admin finally gives me a password, I don't want a weak one!"
     <'.'> "Password quality rules live in /etc/security/pwquality.conf."
     <'.'> "There's a commented-out line in there: '# minlen = 8'. Turn it on, and make it 12!"
-    <'.'> "No editor, remember? Use sed to edit the file in place."
-  objective: "sudo sed -i 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf"
+    <'.'> "Open it in an editor. It belongs to root, so the editor needs root too."
+  objective: "sudo nano /etc/security/pwquality.conf   (or: sudo sed -i 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf)"
   hard_objective: "In /etc/security/pwquality.conf, replace the line '# minlen = 8' with 'minlen = 12'."
   hints:
-    - "Look first: grep minlen /etc/security/pwquality.conf. sed's substitute command is s/OLD/NEW/, and -i edits the file in place instead of printing the result."
-    - "Match the whole commented line, starting at the beginning (^), and replace it: s/^# minlen = 8/minlen = 12/. The file belongs to root: sudo sed -i '...' FILE"
+    - "Files in /etc belong to root. Open this one with sudo and an editor: sudo nano FILE (or sudo vim FILE, or sudoedit FILE)."
+    - "In nano, Ctrl+W searches: type minlen and press Enter. Delete the '# ' at the start of the line and change 8 to 12. Ctrl+O then Enter saves; Ctrl+X quits."
   lesson: |
-    sed (Stream EDitor) edits text with commands, which is perfect when there's no editor:
-      sed 's/old/new/' file          print the file with the FIRST 'old' on each line replaced
-      sed 's/old/new/g' file         replace ALL matches on each line (g = global)
-      sed -i 's/old/new/' file       edit the file IN PLACE (-i.bak keeps a backup copy)
-      sed -n '5,10p' file            print only lines 5 to 10
-      sed '/^#/d' file               delete lines that start with #
-      sed 's|/usr/local|/opt|' file  any character can be the separator: handy for paths
-    Always run without -i first to preview the change.
+    Editing config files is everyday admin work, and the exam expects you to do it in a terminal editor.
+      sudo nano FILE    the shortcuts are listed at the bottom (^ means Ctrl, M- means Alt)
+        Ctrl+W search   Ctrl+K cut line   Ctrl+U paste   Ctrl+O save (then Enter)   Ctrl+X quit
+        Alt+U undo      Ctrl+_ go to a line number
+      sudo vim FILE     modal: i = insert mode, Esc = back to command mode
+        /text search    dd delete line   u undo   :w save   :wq save and quit   :q! quit WITHOUT saving
+      sudoedit FILE     edits a copy as YOU, then puts it back as root (safer than sudo nano)
+    Forgot sudo? The editor opens the file, but saving fails with 'Permission denied'.
+    No editor at all (or 100 servers)? sed makes the same change in one command:
+      sudo sed -i 's/^# minlen = 8/minlen = 12/' /etc/security/pwquality.conf
     pwquality.conf settings (used by PAM when users change passwords):
       minlen = 12     minimum length          minclass = 3   at least 3 character classes
       dcredit = -1    need at least 1 digit   ucredit = -1   ...1 uppercase   ocredit = -1  ...1 symbol
       retry = 3       attempts before giving up
     Password AGE (rather than quality) is set in /etc/login.defs and with chage.
   mistakes:
+    - pattern: '^\s*sudo\s+(-e\s|nano|vim?|vi|sudoedit)|^\s*sudoedit'
+      message: |
+        minlen still isn't 12. Did you save before quitting (nano: Ctrl+O, Enter)? Is the '#' gone?
+        A line that starts with # is a comment and does nothing. Check: grep minlen /etc/security/pwquality.conf
     - pattern: '^\s*(sudo\s+)?sed\s+[''"]'
       message: "Without -i, sed only PRINTS the changed text. The file itself is untouched. Add -i to edit in place."
     - pattern: '^\s*sed\s+-i'
@@ -1371,13 +1381,23 @@
   intro_text: |
     <'.'> "One more rule. Right now, passwords on this system NEVER expire."
     <'.'> "Look at PASS_MAX_DAYS in /etc/login.defs. 99999 days is about 273 years!"
-    <'.'> "Change it to 90 for every new account, with sed again."
+    <'.'> "Change it to 90 for every new account. This time, no editor: use sed."
+    <'.'> "One command, no menus. That's how you'd change it on a hundred servers at once!"
   objective: "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS\t90/' /etc/login.defs"
   hard_objective: "Set PASS_MAX_DAYS to 90 in /etc/login.defs."
   hints:
+    - "sed's substitute command is s/OLD/NEW/, and -i edits the file in place instead of printing the result. The file belongs to root, so: sudo sed -i 's/OLD/NEW/' FILE"
     - "grep PASS_MAX_DAYS /etc/login.defs shows a commented explanation AND the real setting. Only change the line that STARTS with PASS_MAX_DAYS. Careful: the gap before 99999 is a TAB, not spaces. See it with: grep ^PASS_MAX_DAYS /etc/login.defs | cat -A  (a tab shows as ^I)"
     - "Use ^ to anchor the match to the start of the line and .* to match the rest of it, then replace the whole line: s/^PASS_MAX_DAYS.*/PASS_MAX_DAYS 90/"
   lesson: |
+    sed (Stream EDitor) edits text with commands instead of keystrokes:
+      sed 's/old/new/' file          print the file with the FIRST 'old' on each line replaced
+      sed 's/old/new/g' file         replace ALL matches on each line (g = global)
+      sed -i 's/old/new/' file       edit the file IN PLACE (-i.bak keeps a backup copy)
+      sed -n '5,10p' file            print only lines 5 to 10
+      sed '/^#/d' file               delete lines that start with #
+      sed 's|/usr/local|/opt|' file  any character can be the separator: handy for paths
+    Always run without -i first to preview the change.
     /etc/login.defs holds defaults for NEW accounts:
       PASS_MAX_DAYS 90    password expires after 90 days
       PASS_MIN_DAYS 1     must wait 1 day between changes
@@ -1486,12 +1506,11 @@
   intro_text: |
     <'.'> "Before we pack anything into the backpack, let's make sure the filesystem is healthy."
     <'.'> "Run a full filesystem check on backpack.img. Force it, even though it looks clean!"
-    <'.'> "Psst: this terminal can't answer 'Fix this? (y/n)' questions, so tell it not to fix anything."
-  objective: "e2fsck -fn backpack.img"
-  hard_objective: "Force a full, read-only filesystem check of backpack.img."
+  objective: "e2fsck -f backpack.img"
+  hard_objective: "Force a full filesystem check of backpack.img."
   hints:
     - "fsck checks and repairs filesystems. For ext4 the real tool is e2fsck (also called fsck.ext4). It skips 'clean' filesystems unless you force it."
-    - "-f forces a full check. -n opens the filesystem read-only and answers 'no' to every repair question, so it never needs a terminal."
+    - "-f forces a full check, even when the filesystem is marked clean. If it finds a problem it asks before each fix: y to fix, n to leave it."
   lesson: |
     fsck checks (and repairs) a filesystem. NEVER run it on a mounted filesystem: unmount first.
       fsck /dev/sdb1        detects the type and runs fsck.ext4 (= e2fsck), fsck.vfat, ...
@@ -1509,9 +1528,7 @@
         The generic fsck wrapper picks the right checker by looking at the device. On an image file
         here it can't, and does nothing. Call the ext4 checker directly: e2fsck (or fsck.ext4).
     - pattern: '^\s*(sudo\s+)?(e2fsck|fsck\.ext[234])\s'
-      message: |
-        'need terminal for interactive repairs'? This terminal can't answer fix prompts. Add -n
-        (check only). Saw 'clean' and no passes? That was the quick check. Force a full one with -f.
+      message: "Saw 'clean' and no passes? That was the quick check. Force a full one with -f."
     - pattern: '(e2fsck|fsck\S*)\s+(\S+\s+)*/dev/'
       always: true
       message: "Careful with /dev devices: checking a MOUNTED filesystem can corrupt it. The target here is backpack.img."
@@ -1529,33 +1546,34 @@
     <'.'> "I found a blank disk image: map.img. It'll hold our escape map. We'll pack it with the backpack."
     <'.'> "A real disk needs a partition table before it can be formatted."
     <'.'> "Give it a GPT partition table and one partition that fills the whole disk."
-    <'.'> "fdisk asks lots of questions. parted can do it all in one command with -s (script mode)!"
-  objective: "parted -s map.img mklabel gpt mkpart map ext4 1MiB 100%"
+    <'.'> "fdisk walks you through it with a menu. Lost inside? Press m for help!"
+  objective: "fdisk map.img   then press: g, n, Enter, Enter, Enter, w   (or: parted -s map.img mklabel gpt mkpart map ext4 1MiB 100%)"
   hard_objective: "Create a GPT partition table on map.img with a single partition spanning the whole disk."
   hints:
-    - "parted -s DISK COMMANDS... runs without asking anything. You need two commands: mklabel (the partition table type), then mkpart (a partition)."
-    - "mklabel gpt, then mkpart NAME FSTYPE START END. Start at 1MiB (for alignment) and end at 100%. Check your work with: fdisk -l map.img"
+    - "fdisk DISK opens a menu-driven partition editor (here the disk is the file map.img). Inside, m lists every command. Nothing is saved until you write the table."
+    - "g creates a new, empty GPT table. n adds a partition: press Enter to accept each default (number, first sector, last sector). p prints the result, w writes it and quits."
   lesson: |
     Partitioning: a disk -> a partition TABLE (label) -> partitions -> a filesystem in each.
       GPT    modern: up to 128 partitions, disks bigger than 2 TiB, needed for UEFI
       MBR    old ('msdos'): 4 primary partitions, max 2 TiB
-    parted (scriptable):
+    fdisk (menu-driven):
+      sudo fdisk /dev/sdb   then:  g (new GPT table)  o (new MBR table)  n (new partition)
+                                   d (delete)  t (change type)  p (print)  w (write and quit)
+      Nothing is written until w. q quits WITHOUT saving.
+      fdisk -l /dev/sdb     list partitions (no menu)
+    parted (one command, good for scripts):
       parted -s /dev/sdb mklabel gpt
       parted -s /dev/sdb mkpart data ext4 1MiB 100%
-      parted /dev/sdb print         show the table
-    fdisk (interactive; the exam may expect it):
-      sudo fdisk /dev/sdb  then:  g (new GPT table)  n (new partition)  p (print)  w (write and quit)
-      Nothing is written until w. q quits WITHOUT saving.
-      fdisk -l /dev/sdb   list partitions (works without the menus)
+      parted /dev/sdb print   show the table    (plain 'parted /dev/sdb' opens its own prompt)
     Then:  mkfs.ext4 /dev/sdb1  ->  mount /dev/sdb1 /mnt  ->  add it to /etc/fstab
     lsblk shows disks and partitions as a tree. blkid shows UUIDs (use them in fstab).
   mistakes:
     - pattern: '^\s*(sudo\s+)?fdisk\s+map\.img\s*$'
       message: |
-        fdisk is menu-driven and this terminal can't answer its prompts. Use parted -s, or
-        fdisk -l map.img to LIST partitions. (On the exam, fdisk's keys are: g, n, p, w.)
-    - pattern: '^\s*(sudo\s+)?parted\s+map\.img\b'
-      message: "Without -s, parted waits for interactive input. Put -s first: parted -s map.img mklabel gpt ..."
+        No GPT partition yet. fdisk only saves when you press w (q quits WITHOUT saving).
+        Start with g for a GPT table: o makes an old MBR (DOS) table instead.
+    - pattern: '^\s*(sudo\s+)?fdisk\s+-l'
+      message: "fdisk -l only LISTS partitions. Open the menu to change them: fdisk map.img"
     - pattern: 'mklabel\s+msdos'
       message: "msdos is the old MBR format. The task asks for GPT: mklabel gpt"
   win_condition:
@@ -1605,13 +1623,12 @@
     <'.'> "Backpack, check. Map, check."
     <'.'> "Once we're out there, I need to keep my signal alive so you can find me."
     <'.'> "Schedule a heartbeat! A cron job that appends the date to 'heartbeat.log' every minute!"
-    <'.'> "The text editor is unstable... we have to bypass it!"
-    <'.'> "Pipe the schedule directly into the crontab!"
-  objective: "echo \"* * * * * date >> heartbeat.log\" | crontab -"
-  hard_objective: "Without an editor, schedule a cron job that appends the current date to 'heartbeat.log' every minute."
+    <'.'> "Edit your crontab and add the job. It runs from your home directory."
+  objective: "crontab -e   then add the line: * * * * * date >> heartbeat.log   (or: echo \"* * * * * date >> heartbeat.log\" | crontab -)"
+  hard_objective: "Schedule a cron job that appends the current date to 'heartbeat.log' every minute."
   hints:
     - "A cron line has 5 time fields (minute hour day-of-month month day-of-week) followed by the command. '*' in a field means 'every'."
-    - "'crontab -e' opens an editor, which this terminal can't run. 'crontab -' installs a crontab read from standard input, so you can pipe a quoted line into it with echo."
+    - "crontab -e opens your crontab in an editor. The first time, it asks which editor to use: nano is the easiest. Add your line at the bottom, save and quit, and crontab installs it."
   lesson: |
     A crontab line: 5 time fields, then the command.
       .---------- minute (0-59)
@@ -1627,8 +1644,9 @@
     System-wide: /etc/crontab and /etc/cron.d/* have an extra USER field after the times:
       0 3 * * * root /usr/local/bin/backup.sh
     Script drop-in directories: /etc/cron.hourly, cron.daily, cron.weekly, cron.monthly
-    'echo ... | crontab -' REPLACES your whole crontab. To append instead:
-      (crontab -l; echo "new line") | crontab -
+    crontab -e asks for an editor once and remembers it (select-editor to change, or set EDITOR=vim).
+    Scripted, without an editor: echo "* * * * * cmd" | crontab -
+      This REPLACES your whole crontab. To append instead: (crontab -l; echo "new line") | crontab -
   mistakes:
     - pattern: 'echo\s+\*'
       message: |
@@ -1851,6 +1869,7 @@
       ssh-keygen -t ed25519        modern default: smaller and faster than RSA
       ssh-keygen -t rsa -b 4096    RSA with a 4096-bit key
       -f FILE   output file (default ~/.ssh/id_<type>)    -N ''   empty passphrase
+    Without -f and -N it asks for both. Press Enter for the default; the passphrase doesn't show as you type.
       -C "comment"   label the key, e.g. with your email
     Keys normally live in ~/.ssh/ (directory mode 700). On the server, public keys go in
     ~/.ssh/authorized_keys (mode 600). SSH refuses keys whose permissions are too open.
@@ -1858,8 +1877,9 @@
   mistakes:
     - pattern: '^\s*ssh-keygen(\s+-t\s+\w+)?\s*$'
       message: |
-        Without options ssh-keygen asks questions interactively (file name, passphrase), and this terminal
-        can't answer prompts. Give the answers as options: -f for the file, -N for the passphrase.
+        Accepted the default file? The key went to ~/.ssh/id_rsa, but this quest wants it right in your
+        home directory. Run it again and type id_rsa at 'Enter file in which to save the key',
+        or skip the questions with options: -f id_rsa for the file, -N "" for an empty passphrase.
   win_condition:
     type: "command_output_matches"
     command: "test -f /home/player/id_rsa && test -f /home/player/id_rsa.pub && echo yes"
@@ -1891,9 +1911,10 @@
     No reply doesn't always mean the host is down. Firewalls often block ICMP.
   mistakes:
     - pattern: '^\s*ping\s+[^-]\S*\s*$'
+      always: true
       message: |
-        Without -c, Linux ping never stops on its own (in a real terminal you'd press Ctrl+C).
-        It was killed here. Use -c to send a fixed number of packets.
+        Without -c, Linux ping never stops on its own: Ctrl+C stops it and prints the summary.
+        ping -c 3 sends exactly 3 packets, which is what you want in scripts.
   win_condition:
     type: "user_output_contains"
     expected_output: "bytes from"
@@ -1952,7 +1973,7 @@
     - "ssh -i KEYFILE user@host COMMAND. Log in with your PRIVATE key (id_rsa)."
   lesson: |
     ssh opens a secure shell on another machine.
-      ssh player@gateway             interactive login
+      ssh player@gateway             interactive login (exit or Ctrl+D comes back)
       ssh player@gateway hostname    run ONE command remotely, then return
       ssh -i id_rsa player@gateway   use a specific private key
       ssh -p 2222 player@gateway     connect to a non-standard port
@@ -1970,8 +1991,8 @@
     - pattern: '-i\s+\S*id_rsa\.pub'
       message: "ssh logs in with the PRIVATE key (id_rsa). The .pub file is the half you gave the server."
   win_condition:
-    type: "user_output_matches"
-    expected_output: "gateway"
+    type: "user_output_regex"
+    pattern: '(?m)^\s*gateway\s*$'
   success_text: |
     <'.'> "It works! We can teleport commands across the network!"
   xp_reward: 30
@@ -1983,11 +2004,12 @@
     <'.'> "Before we leave: this machine still lets people log in over SSH with just a PASSWORD."
     <'.'> "That's how bots like 203.0.113.66 get in. Keys only, from now on!"
     <'.'> "In /etc/ssh/sshd_config, change 'PasswordAuthentication yes' to 'PasswordAuthentication no'."
-  objective: "sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config"
+    <'.'> "Your editor or sed, your choice. Either way, it's root's file."
+  objective: "sudo nano /etc/ssh/sshd_config   (or: sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config)"
   hard_objective: "Disable SSH password authentication in /etc/ssh/sshd_config. (sshd -T must report it as 'no'.)"
   hints:
     - "Find the active setting: grep -n PasswordAuthentication /etc/ssh/sshd_config. Lines starting with # are comments and do nothing."
-    - "Change the existing line with sed -i rather than adding a new one. sshd uses the FIRST value it finds for each setting, so a 'no' added at the end would be ignored."
+    - "Change the existing line rather than adding a new one: sshd uses the FIRST value it finds for each setting, so a 'no' added at the end would be ignored. In nano, Ctrl+W finds it; with sed, use s/OLD/NEW/ and -i."
   lesson: |
     /etc/ssh/sshd_config hardening favorites:
       PasswordAuthentication no     keys only. Set up and TEST your key first, or you'll lock yourself out!
@@ -2006,7 +2028,11 @@
       message: |
         Appending adds a SECOND PasswordAuthentication line at the end, but sshd uses the FIRST
         one it finds, which still says yes. Check: sudo sshd -T | grep -i passwordauth
-        Change the existing line with sed -i instead (and remove the extra line you added).
+        Change the existing line instead (and remove the extra line you added).
+    - pattern: '^\s*sudo\s+(-e\s|nano|vim?|vi|sudoedit)|^\s*sudoedit'
+      message: |
+        Still 'yes'. Did you change the line WITHOUT a # in front (near the end of the file), and save?
+        Check what sshd will actually use: sudo sshd -T | grep -i passwordauth
     - pattern: 's/#PasswordAuthentication'
       message: "The line starting with # is a comment. The active one (without #) is near the end of the file."
     - pattern: '^\s*sed\s+-i'

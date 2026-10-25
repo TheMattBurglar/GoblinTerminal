@@ -12,6 +12,7 @@ I built this project to serve as a fun, interactive challenge *inspired by* the 
 
 *   **Story Mode**: A narrative-driven campaign across 3 Acts.
 *   **Real Environment**: Commands are executed in a real Linux container (Docker/Podman). No simulation quirks—just real Linux.
+*   **Real Interactive Programs**: Editors, pagers and prompts (`nano`, `vim`, `less`, `man`, `top`, `fdisk`, `passwd`, `adduser`, `crontab -e`, `visudo`, `ssh` logins...) get your real terminal, just like on the exam. The game comes back and checks your quest when you quit them. Type `shell` for a full bash session in the container; `exit` returns to the game.
 *   **Twin-Container Architecture**: In Act 3, the game spins up a second "Gateway" container, allowing you to practice real SSH, SCP, and network connectivity quests between isolated systems.
 *   **Exam-Inspired Challenges**: The quests are designed around the objectives of the **Canonical Using Linux Terminal** exam, covering skills such as:
     *   File & Directory Management, find, redirection (`>`, `>>`, `2>/dev/null`) and sed

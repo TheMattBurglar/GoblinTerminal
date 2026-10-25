@@ -222,6 +222,60 @@ func (m *Manager) ExecuteCommand(command string) (string, string, error) {
 	return out.String(), stderr.String(), err
 }
 
+// Files a terminal session leaves in the container: a transcript of
+// everything it printed, and the shell's last working directory.
+const (
+	sessionLog = "/tmp/.goblin_session"
+	sessionCwd = "/tmp/.goblin_cwd"
+)
+
+// TerminalCommand returns a command that runs one player command in the
+// container with a real terminal, for programs that ask questions or draw
+// the whole screen (nano, fdisk, passwd, top...). The output is recorded
+// with script(1) so it can be shown and checked afterwards.
+func (m *Manager) TerminalCommand(command string) *exec.Cmd {
+	return m.terminalCmd(fmt.Sprintf("script -qefc %s %s", shellQuote(command), sessionLog))
+}
+
+// ShellCommand returns a command that opens an interactive bash shell in the
+// container. Its working directory is saved at each prompt, so the game can
+// pick up where the player left off.
+func (m *Manager) ShellCommand() *exec.Cmd {
+	// The home directory is a bind mount, so it has no .bashrc until the
+	// player makes one. Fall back to Ubuntu's default for the usual prompt.
+	shell := `if [ -f ~/.bashrc ]; then exec bash -i; else exec bash --rcfile /etc/skel/.bashrc -i; fi`
+	banner := `printf '\033[1;32m<^.^> Goblin shell. Type exit to return to the game.\033[0m\n'`
+	return m.terminalCmd(fmt.Sprintf("%s; script -qefc %s %s", banner, shellQuote(shell), sessionLog))
+}
+
+func (m *Manager) terminalCmd(script string) *exec.Cmd {
+	_ = m.RunAsRoot(fmt.Sprintf("rm -f %s %s", sessionLog, sessionCwd))
+	term := os.Getenv("TERM")
+	if term == "" {
+		term = "xterm-256color"
+	}
+	return exec.Command(m.Runtime, "exec", "-it", "-w", m.CurrentDir,
+		"-e", "TERM="+term,
+		"-e", "SHELL=/bin/bash",
+		"-e", fmt.Sprintf("PROMPT_COMMAND=pwd > %s 2>/dev/null", sessionCwd),
+		m.ContainerName, "bash", "-c", script)
+}
+
+// FinishSession returns the raw transcript of the last terminal session and
+// moves CurrentDir to wherever its shell ended up.
+func (m *Manager) FinishSession() string {
+	if dir, _ := m.ExecuteValidation("cat " + sessionCwd); strings.TrimSpace(dir) != "" {
+		m.CurrentDir = strings.TrimSpace(dir)
+	}
+	out, _ := m.ExecuteValidation("cat " + sessionLog)
+	return out
+}
+
+// shellQuote quotes s as a single bash word.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // ExecuteValidation runs a command from the root directory to check win conditions
 // This ensures game logic is consistent regardless of where the user is cd'd to
 func (m *Manager) ExecuteValidation(command string) (string, error) {

@@ -158,7 +158,9 @@ func TestMistakePatterns(t *testing.T) {
 		{48, "fsck backpack.img", true},
 		{48, "e2fsck -fn backpack.img", true}, // only shown if it failed
 		{49, "fdisk map.img", true},
-		{49, "parted map.img mklabel gpt", true},
+		{49, "fdisk -l map.img", true},
+		{46, "sudo nano /etc/security/pwquality.conf", true}, // only shown if it failed
+		{53, "sudoedit /etc/ssh/sshd_config", true},
 		{49, "parted -s map.img mklabel gpt mkpart map ext4 1MiB 100%", false},
 		{52, "sudo logrotate -d /etc/logrotate.d/eye", true},
 		{52, "sudo logrotate -f /etc/logrotate.d/eye", false},

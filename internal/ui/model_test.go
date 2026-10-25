@@ -132,20 +132,57 @@ func TestSubmitAnswer(t *testing.T) {
 	}
 }
 
-func TestIsInteractive(t *testing.T) {
+func TestNeedsTerminal(t *testing.T) {
 	for cmd, want := range map[string]bool{
-		"nano file":            true,
-		"sudo visudo":          true,
-		"crontab -e":           true,
-		"sudo passwd glitch":   true,
-		"passwd -e glitch":     false,
-		"crontab -l":           false,
-		"vimtutor_is_not_real": false,
-		"ls":                   false,
+		"nano file":                               true,
+		"sudo visudo":                             true,
+		"sudo -e /etc/hosts":                      true,
+		"crontab -e":                              true,
+		"sudo passwd glitch":                      true,
+		"sudo adduser glitch":                     true,
+		"fdisk map.img":                           true,
+		"parted map.img":                          true,
+		"man useradd":                             true,
+		"e2fsck -f backpack.img":                  true,
+		"ssh-keygen -t rsa":                       true,
+		"ssh -i id_rsa player@gateway":            true,
+		"su - glitch":                             true,
+		"sudo -i":                                 true,
+		"ping gateway":                            true,
+		"sudo tail -f /var/log/syslog":            true,
+		"passwd -e glitch":                        false,
+		"crontab -l":                              false,
+		"vimtutor_is_not_real":                    false,
+		"ls":                                      false,
+		"man useradd | grep -i home":              false,
+		"fdisk -l map.img":                        false,
+		"parted -s map.img mklabel gpt":           false,
+		"parted map.img print":                    false,
+		"e2fsck -fn backpack.img":                 false,
+		`ssh-keygen -t rsa -f id_rsa -N ""`:       false,
+		"ssh -i id_rsa player@gateway hostname":   false,
+		"ping -c 3 gateway":                       false,
+		"sudo tail /var/log/syslog":               false,
+		"bash script.sh":                          false,
+		"sudo adduser --disabled-password glitch": true,
 	} {
-		if got := isInteractive(cmd); got != want {
-			t.Errorf("isInteractive(%q) = %v, want %v", cmd, got, want)
+		if got := needsTerminal(cmd); got != want {
+			t.Errorf("needsTerminal(%q) = %v, want %v", cmd, got, want)
 		}
+	}
+}
+
+func TestCleanTranscript(t *testing.T) {
+	raw := "Script started on 2026-10-25 [COMMAND=\"x\"]\n" +
+		"\x1b[?2004hplayer@goblin:~$ ech\b \bho \x1b[01;32mhi\x1b[0m\r\n" +
+		"hi\r\n" +
+		"\x1b[?1049h\x1b[Hnano screen\r\nmore nano\x1b[?1049l" +
+		"progress 10%\rprogress 100%\r\n" +
+		"\r\n" +
+		"Script done on 2026-10-25 [COMMAND_EXIT_CODE=\"0\"]\n"
+	want := "player@goblin:~$ echo hi\nhi\nprogress 100%"
+	if got := cleanTranscript(raw); got != want {
+		t.Errorf("cleanTranscript() =\n%q\nwant\n%q", got, want)
 	}
 }
 
